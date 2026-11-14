@@ -1,0 +1,1707 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K.O.-RAMA 3D · Visualizador</title>
+<style>
+  :root{--bg:#120d1a;--panel:#1c1528;--line:#3a2d52;--fg:#f4efe6;--muted:#a99cbd;--volt:#ffe14a;--hot:#ff2d6f}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.4 'Segoe UI',system-ui,sans-serif;overflow:hidden}
+  #app{display:grid;grid-template-columns:1fr 300px;height:100%}
+  canvas{display:block;width:100%;height:100%}
+  aside{background:var(--panel);border-left:2px solid #000;padding:12px;overflow:auto;display:grid;gap:12px;align-content:start}
+  h1{font:800 18px/1 'Segoe UI';margin:0;color:var(--volt)}
+  h2{font:700 11px/1 'Segoe UI';letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+  .row{display:flex;flex-wrap:wrap;gap:5px}
+  button{font:600 13px 'Segoe UI';color:var(--fg);background:#2a2040;border:2px solid var(--line);border-radius:7px;padding:5px 9px;cursor:pointer}
+  button:hover{border-color:var(--muted)} button.on{background:var(--volt);color:#000;border-color:#000}
+  label{display:grid;grid-template-columns:110px 1fr 40px;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+  input[type=range]{width:100%}
+  #status{font-size:12px;color:var(--muted);white-space:pre-wrap}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="app">
+  <div id="view"></div>
+  <aside>
+    <h1 id="titulo">King Frog · piloto 3D</h1>
+    <div class="row"><a href="?p=frog">King Frog</a> · <a href="?p=jack">Jack</a> · <a href="?p=marcov">Marcov</a> · <a href="?p=joana">Joana</a> · <a href="?p=valeria">Valéria</a> · <a href="?p=espinha">Lady Espinha</a></div>
+    <div><h2>Câmera</h2><div class="row"><button data-cam="ring" class="on">Ringue (jogador)</button><button data-cam="front">Frente</button><button data-cam="side">Lado</button><button data-cam="back">Costas</button></div></div>
+    <div><h2>Golpes (clique = repete · segure = carrega)</h2><div class="row"><button data-move="guard" class="on">Guarda</button><button data-move="jab">Jab</button><button data-move="cross">Direto</button><button data-move="hook">Gancho</button><button data-move="upper">Uppercut</button><button data-move="body">Corpo</button><button id="dance" style="display:none">Dança</button></div></div>
+    <div><h2>Esquiva</h2><div class="row"><button data-dodge="L:lean">◀ Inclina</button><button data-dodge="B:lean">Inclina trás</button><button data-dodge="R:lean">Inclina ▶</button></div><div class="row"><button data-dodge="L:hop">◀ Salta</button><button data-dodge="B:hop">Salta trás</button><button data-dodge="R:hop">Salta ▶</button></div></div>
+    <div><h2>Passada (lateral)</h2><div class="row"><button data-step="-1">◀ Passo</button><button data-step="1">Passo ▶</button><button id="stepLoop">Vai e volta</button></div></div>
+    <div><h2>Reações</h2><div class="row"><button data-hit="light">Apanha</button><button data-hit="heavy">Apanha forte</button><button data-hit="ko">K.O. (coroa voa)</button><button id="reset">Repor coroa</button></div></div>
+    <div><h2>Aviso da língua / cuspida (papo)</h2><div class="row"><button id="tell">Inflar papo (aviso)</button><button id="feint">Finta</button><button id="spit">Cuspida de lama</button></div>
+      <label>Papo manual <input id="papo" type="range" min="0" max="4" step="0.01" value="0"><span id="papoV">0</span></label>
+      <div class="row"><button id="tongue">Lançar língua</button></div>
+      <label>Boca aberta <input id="mouthOpen" type="range" min="0" max="1" step="0.01" value="0"><span></span></label></div>
+    <div><h2>Rosto 2.5D</h2><div class="row"><button data-face="normal" class="on">Normal</button><button data-face="angry">Raiva</button><button data-face="pain">Dor</button><button data-face="ko">K.O.</button></div>
+      <label>Olhos ↔ <input id="eyeX" type="range" min="0.05" max="0.45" step="0.005" value="0.23"><span></span></label>
+      <label>Olhos ↕ <input id="eyeY" type="range" min="-0.3" max="0.2" step="0.005" value="-0.07"><span></span></label>
+      <label>Olhos frente <input id="eyeZ" type="range" min="-0.2" max="0.2" step="0.005" value="-0.045"><span></span></label>
+      <label>Tamanho olho <input id="eyeS" type="range" min="0.05" max="0.3" step="0.005" value="0.23"><span></span></label>
+      <label>Boca ↕ <input id="mouthY" type="range" min="-0.6" max="0.1" step="0.005" value="-0.25"><span></span></label>
+      <label>Nariz ↕ <input id="noseY" type="range" min="-0.4" max="0.1" step="0.005" value="-0.1"><span></span></label>
+      <div id="crabEyeCtl" style="display:none">
+      <label>Olho siri ↔ <input id="ceX" type="range" min="-0.12" max="0.12" step="0.002" value="0"><span></span></label>
+      <label>Olho siri ↕ <input id="ceY" type="range" min="-0.12" max="0.12" step="0.002" value="0"><span></span></label>
+      <label>Olho siri tamanho <input id="ceS" type="range" min="0.03" max="0.25" step="0.002" value="0.13"><span></span></label>
+      </div>
+      <label>Boca frente <input id="mouthLift" type="range" min="0" max="0.05" step="0.001" value="0.020"><span></span></label>
+    </div>
+    <div><h2>Visual</h2>
+      <label>Contorno <input id="outline" type="range" min="0" max="5" step="0.1" value="3.2"><span></span></label>
+      <label>Vincos (quinas) <input id="crease" type="range" min="0" max="0.012" step="0.0005" value="0.0035"><span></span></label>
+      <label>Quadros/s animação <input id="animFps" type="range" min="8" max="60" step="1" value="12"><span></span></label>
+      <label>Retícula (tamanho) <input id="cell" type="range" min="3" max="14" step="0.5" value="7"><span></span></label>
+      <label>Pausa de impacto <input id="hitstop" type="range" min="0" max="0.2" step="0.01" value="0.08"><span></span></label>
+    </div>
+    <div id="status">Carregando…</div>
+  </aside>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+// personagens: ?p=frog (padrão) ou ?p=jack. Cada um diz seus arquivos, o tamanho das peças e o que tem de especial.
+const CHARS = {
+  frog: { name: 'King Frog', dir: 'frog', body: 'body_frog.glb', gloves: ['prop_frog_glove_L.glb', 'prop_frog_glove_R.glb'], gloveScale: 1.55, gloveTwist: 0,
+          hat: 'prop_frog_crown.glb', hatScale: 1.8, hatDrop: -0.02, sc: 1, frogStuff: true, eyeStyle: 'frog', mouthW: 3.2,
+          face: { eyeX: 0.23, eyeY: -0.07, eyeZ: -0.045, eyeS: 0.23, mouthY: -0.25, mouthLift: 0.02 } },
+  marcov: { name: 'Dr. Marcov', dir: 'marcov', body: 'body_marcov.glb', gloves: ['prop_marcov_gauntlet_L.glb', 'prop_marcov_gauntlet_R.glb'], gloveScale: 1, gloveTwist: Math.PI, gloveFlipZ: true,   /* polegares para cima */
+          hat: null, sc: 0.81, frogStuff: false, eyeStyle: 'sprite', mouthW: 0.545, nostrils: false, atlas: '../../engine-cpp/assets/sprites/marcov.png',
+          headR: 0.22,   /* guarda alta padrão (cotovelos dobrados) */ gloveR: 0.18, palmsIn: true, gloveSink: -0.12, coatSway: 0.35,
+          tail: { y: 0.8, color: '#5a413a', len: 0.8, r: 0.035 },
+          suit: { top: '#24384f', pants: '#4b4a50', dark: 0.32, waistY: 0.86, bootY: 0.36, neckY: 1.31, halfW: 0.3 },
+          face: { eyeX: 0.09, eyeY: -0.015, eyeZ: -0.03, eyeS: 0.17, mouthY: -0.16, mouthLift: 0.01, noseY: -0.1 }, sway: true },
+  espinha: { name: 'Lady Espinha', dir: 'espinha', body: 'body_espinha.glb', gloves: ['prop_espinha_fist_L.glb', 'prop_espinha_fist_R.glb'], gloveScale: 1.15,   /* punhos de cacto em código */
+          hat: null, sc: 0.81, frogStuff: false, eyeStyle: 'espinha', mouthW: 1.2, nostrils: false,   /* rosto em código (espEye/espMouth/espNose) */
+          wig: { file: 'prop_espinha_coroa.glb', tips: true, double: true },   /* coroa de pétalas em código (make_espinha_crown.py) */
+          headR: 0.22, gloveR: 0.13, gloveSink: -0.01, guard: [0.2, 0.26, 0.3],   /* cotovelo dobrado: punhos na altura do queixo */
+          face: { eyeX: 0.068, eyeY: -0.014, eyeZ: -0.03, eyeS: 0.12, mouthY: -0.13, mouthLift: 0.01, noseY: -0.058 } },
+  valeria: { name: 'Valéria Vulcânica', dir: 'valeria', body: 'body_valeria.glb', gloves: ['prop_valeria_fist_L.glb', 'prop_valeria_fist_R.glb'],   /* punhos em código (make_valeria_fist.py) fechados no cabo */ gloveScale: 1,
+          hat: null, sc: 0.81, frogStuff: false, eyeStyle: 'valeria', mouthW: 0.95, nostrils: false,   /* rosto desenhado em código (valEye/valMouth/valNose) */
+          wig: { file: 'prop_valeria_hair.glb', tips: true, lava: true },   /* cabelão de magma */
+          dance: 'anim_valeria_samba.glb',   /* samba (Mixamo) passado para o esqueleto dela */
+          skirt: { file: 'prop_valeria_skirt.glb' },   umbrella: { scale: 1 },   /* guarda-chuvas em código (makeUmbrella) */   /* saia de babados em código (make_valeria_skirt.py) */   /* cabelão de magma em código (make_valeria_hair.py) */
+          headR: 0.22, gloveR: 0.12, gloveSink: -0.01, guard: [0.27, 0.27, 0.46],   /* braços quase esticados (cotovelo pouco dobrado), punhos à frente na altura do peito */
+          face: { eyeX: 0.06, eyeY: 0.02, eyeZ: -0.03, eyeS: 0.11, mouthY: -0.1, mouthLift: 0.01, noseY: -0.045 } },   /* chave do rosto aprovada */
+  joana: { name: 'Joana Cara-de-Craca', dir: 'joana', body: 'body_joana.glb', gloves: ['prop_joana_hook_L.glb', 'prop_joana_claw_R_pinca.glb'], claw: { side: 'R', dir: -1, closed: 0.3 },   /* pinça móvel separada (separar_pinca.py) */ gloveScale: 1, gloveTwist: [Math.PI, Math.PI],   /* meia volta: gancho virado para dentro, garra desvirada */
+          hat: 'prop_joana_hat_tras.glb', hatScale: 1.4, hatWorldY: 1.6, hatTilt: 8, sc: 0.81, frogStuff: false, eyeStyle: 'human', noEyes: true, mouthW: 1.2, nostrils: false,
+          wig: { file: 'prop_joana_dreads_codigo.glb', tips: true },
+          crabEye: { pos: [-0.3529, 1.6288, 0.2298], dx: -0.002, dy: 0.010, size: 0.06 },   /* centro da pupila do olho de siri (pintar_olho_siri.py): pupila desenhada, X no K.O. */   /* dreads feitos por código (make_joana_dreads.py): raiz presa sob a aba, só as pontas balançam */ headR: 0.22, gloveR: 0.18, gloveSink: -0.1,
+          face: { eyeX: 0.08, eyeY: 0.0, eyeZ: -0.03, eyeS: 0.12, mouthY: -0.195, mouthLift: 0.01 } },
+  jack: { name: 'Jack Mãos de Colmeia', dir: 'jack', body: 'body_jack.glb', gloves: ['prop_jack_hive_L.glb', 'prop_jack_hive_R.glb'], gloveScale: 1, gloveTwist: 0,
+          hat: 'prop_jack_hat.glb', hatScale: 1.15, hatDrop: -0.13, hatWorldY: 1.165, hatTilt: 12, guard: [0.42, 0.16, 0.3], /* guarda baixa, colmeias perto do corpo: cotovelo dobrado */ holesUp: true, headR: 0.2, gloveR: 0.16,
+          outfit: { honey: '#e8b13a', backR: 0.05, backY: 0.84, shirt: '#d9a441', skin: '#f0c3ac', neckY: 0.935, coreHalfW: 0.09, shirtHex: 0.036, shirtHalfW: 0.13, shirtY0: 0.598, shirtY1: 1.02, hex: '#26401d', hexCell: 0.032, hexFrom: 0.55 }, sc: 0.67, frogStuff: false, eyeStyle: 'sprite', mouthW: 1.48,
+          hair: { brimY: 1.165, crownR: 0.145, crownH: 0.16 }, sway: true,   // o chapéu prende o cabelo: nada atravessa
+          atlas: '../../engine-cpp/assets/sprites/jack.png',
+          face: { eyeX: 0.075, eyeY: -0.03, eyeZ: -0.055, eyeS: 0.18, mouthY: -0.163, mouthLift: 0.008 }, nostrils: false },
+};
+const CHAR = CHARS[new URLSearchParams(location.search).get('p')] || CHARS.frog;
+const SC = CHAR.sc;   // escala das distâncias de golpe/guarda pelo porte (o sapo tem 2,15 m)
+const ASSETS = `../../assets3d/${CHAR.dir}/clean/`;
+const $ = s => document.querySelector(s);
+const status = t => ($('#status').textContent = t);
+
+// ---------------------------------------------------------------- cena, ringue, câmera
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(Math.min(1.5, devicePixelRatio));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+$('#view').append(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#1a1426');
+const camera = new THREE.PerspectiveCamera(34, 1, 0.05, 100);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.25, 0);
+scene.add(new THREE.HemisphereLight('#ffffff', '#3a3050', 0.55));
+const sun = new THREE.DirectionalLight('#ffffff', 2.6);
+sun.position.set(3.5, 4, 3);
+scene.add(sun);
+// cenário: o lutador fica parado no centro e é o ringue que gira na passada (como no jogo)
+const stage = new THREE.Group(); scene.add(stage);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshToonMaterial({ color: '#2c4a3a' }));
+floor.rotation.x = -Math.PI / 2; stage.add(floor);
+const apron = new THREE.Mesh(new THREE.PlaneGeometry(9.8, 9.8).rotateX(-Math.PI / 2), new THREE.MeshToonMaterial({ color: '#3b6b52' }));
+apron.position.y = 0.002; stage.add(apron);
+const ringLine = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.16, 48), new THREE.MeshBasicMaterial({ color: '#ffe14a' }));
+ringLine.rotation.x = -Math.PI / 2; ringLine.position.y = 0.004; stage.add(ringLine);
+const postMat = new THREE.MeshToonMaterial({ color: '#d9d9d9' }), padMat = new THREE.MeshToonMaterial({ color: '#c0392b' });
+const ropeCols = ['#e8e8e8', '#c0392b', '#2f6fd6'];
+for (const [x, z] of [[-4.9, -4.9], [4.9, -4.9], [4.9, 4.9], [-4.9, 4.9]]) {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.6, 12), postMat); post.position.set(x, 0.8, z); stage.add(post);
+  const pad = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.0, 0.2), padMat); pad.position.set(x, 0.95, z); stage.add(pad);
+}
+for (let i = 0; i < 3; i++) {
+  const y = 0.55 + i * 0.38, m = new THREE.MeshToonMaterial({ color: ropeCols[i] });
+  for (const [a, b] of [[[-4.9, -4.9], [4.9, -4.9]], [[4.9, -4.9], [4.9, 4.9]], [[4.9, 4.9], [-4.9, 4.9]], [[-4.9, 4.9], [-4.9, -4.9]]]) {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, len, 8).rotateZ(Math.PI / 2), m);
+    rope.position.set((a[0] + b[0]) / 2, y, (a[1] + b[1]) / 2); rope.rotation.y = -Math.atan2(b[1] - a[1], b[0] - a[0]); stage.add(rope);
+  }
+}
+const CAMS = { ring: [[0, 2.2, 4.6], [0, 1.4, 0]], front: [[0, 1.3, 4.2], [0, 1.1, 0]], side: [[6.2, 1.5, 1.2], [0, 1.15, 0.3]], back: [[0, 1.6, -4.2], [0, 1.1, 0]] };
+function setCam(k) { const [p, t] = CAMS[k]; camera.position.set(...p); controls.target.set(...t); controls.update(); }
+setCam('ring');
+function resize() { const w = $('#view').clientWidth, h = $('#view').clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+// contorno de tela: renderiza a cena com profundidade e desenha tinta onde a profundidade quebra
+const rt = new THREE.WebGLRenderTarget(1, 1, { stencilBuffer: true });   // estêncil: o interior da boca só aparece pela abertura
+rt.depthTexture = new THREE.DepthTexture(1, 1, THREE.UnsignedInt248Type); rt.depthTexture.format = THREE.DepthStencilFormat;
+const lineWidth = { value: 3.2 };
+const creaseU = { value: 0.0035 };   // limiar do vinco (0 = desliga)
+const post = new THREE.ShaderMaterial({
+  uniforms: { tColor: { value: rt.texture }, tDepth: { value: rt.depthTexture }, px: { value: new THREE.Vector2(1, 1) }, w: lineWidth, crease: creaseU, near: { value: 0.05 }, far: { value: 100 }, ink: { value: new THREE.Color('#0b0710') } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `uniform sampler2D tColor, tDepth; uniform vec2 px; uniform float w, near, far, crease; uniform vec3 ink; varying vec2 vUv;
+    float lin(vec2 uv){ float z = texture2D(tDepth, uv).x * 2.0 - 1.0; return 2.0 * near * far / (far + near - z * (far - near)); }
+    void main(){
+      vec4 c = texture2D(tColor, vUv); float d = lin(vUv), e = 0.0;
+      for (int i = 0; i < 8; i++) { float a = float(i) * 0.785398; vec2 o = vec2(cos(a), sin(a)) * px * w; float dn = lin(vUv + o); e = max(e, (dn - d) / d); }
+      float line = smoothstep(0.012, 0.03, e);
+      // vinco: quina viva no meio da superfície (borda da fivela, beira do casaco, degrau do cinto). A profundidade
+      // muda de inclinação de repente -> segunda derivada alta. Superfície curva lisa quase não acusa.
+      if (crease > 0.0) {
+        float k = 0.0; vec2 s1 = px * max(1.0, w * 0.45);
+        for (int i = 0; i < 4; i++) { float a = float(i) * 0.785398; vec2 o = vec2(cos(a), sin(a)) * s1;
+          float d1 = lin(vUv + o), d2 = lin(vUv - o); k = max(k, abs(d1 + d2 - 2.0 * d) / d); }
+        line = max(line, smoothstep(crease, crease * 1.8, k));
+      }
+      gl_FragColor = vec4(mix(c.rgb, ink, line), 1.0);
+      #include <colorspace_fragment>
+    }`,
+  depthTest: false, depthWrite: false,
+});
+const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
+function resizeRT() { const w = renderer.domElement.width, h = renderer.domElement.height; rt.setSize(w, h); rt.depthTexture.image.width = w; rt.depthTexture.image.height = h; post.uniforms.px.value.set(1 / w, 1 / h); }
+addEventListener('resize', () => { resize(); resizeRT(); }); resize(); resizeRT();
+
+// ---------------------------------------------------------------- toon + contorno que acompanha o esqueleto
+const ramp = new THREE.DataTexture(new Uint8Array([90, 90, 90, 255, 175, 175, 175, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);
+ramp.minFilter = ramp.magFilter = THREE.NearestFilter; ramp.needsUpdate = true;
+const outlineUniform = { value: 0.013 };
+const OUTLINE_MODE = 'tela';   // 'tela' = linha por quebra de profundidade (espessura uniforme); 'casca' = casca invertida
+// sombra de quadrinho: dois tons duros e retícula (pontos em tela, a 45°) que cresce em direção à sombra
+const comic = { cell: { value: 7.0 }, shade: { value: 0.58 }, dots: { value: 0.55 } };
+function comicShader(mat) {
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, { uCell: comic.cell, uShade: comic.shade, uDots: comic.dots });
+    sh.fragmentShader = 'uniform float uCell, uShade, uDots;' + String.fromCharCode(10) + 'float gTone = 0.0;' + String.fromCharCode(10) + sh.fragmentShader
+      .replace('#include <gradientmap_pars_fragment>', `
+        vec3 getGradientIrradiance(vec3 normal, vec3 lightDirection) {
+          float d = dot(normal, lightDirection);
+          gTone = max(gTone, clamp((0.30 - d) / 0.55, 0.0, 1.0));   // 0 = luz, 1 = sombra
+          return vec3(d > 0.12 ? 1.0 : uShade);                     // corte duro
+        }`)
+      .replace('#include <opaque_fragment>', `
+        vec2 g = gl_FragCoord.xy / uCell;
+        g = mat2(0.7071, -0.7071, 0.7071, 0.7071) * g;
+        float r = length(fract(g) - 0.5);
+        float dotR = 0.62 * sqrt(gTone);                              // pontos crescem rumo à sombra
+        float dotMask = 1.0 - smoothstep(dotR - 0.05, dotR + 0.05, r);
+        outgoingLight *= mix(1.0, uDots, dotMask * step(0.02, gTone));
+        #include <opaque_fragment>`);
+  };
+  return mat;
+}
+const papoSkin = { c: { value: new THREE.Vector3(0, 1.66, 0.3) }, r: { value: new THREE.Vector2(0.4, 0.23) }, amt: { value: 0 } };
+const belly = {
+  color: { value: new THREE.Color('#a8c97f') },
+  c: { value: new THREE.Vector2(0, 1.42) },      // centro (x, altura) no corpo em repouso
+  r: { value: new THREE.Vector2(0.34, 0.5) },    // meia-largura, meia-altura
+  floor: { value: 0.97 },                        // não desce para a bermuda
+  ceil: { value: 1.79 },                         // não sobe além do papo (a boca fica logo acima)
+};
+function bellyShader(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    Object.assign(sh.uniforms, { uPapoC: papoSkin.c, uPapoR: papoSkin.r, uPapoAmt: papoSkin.amt });
+    Object.assign(sh.uniforms, { uBellyCol: belly.color, uBellyC: belly.c, uBellyR: belly.r, uBellyFloor: belly.floor, uBellyCeil: belly.ceil });
+    sh.vertexShader = 'uniform vec3 uPapoC; uniform vec2 uPapoR; uniform float uPapoAmt; varying vec3 vBindPos; varying vec3 vBindNrm;' + String.fromCharCode(10) + sh.vertexShader
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vBindPos = position; vBindNrm = normal;
+        // papo: a própria pele da garganta incha (borda some na pele em volta, sem emenda)
+        vec2 pq = (position.xy - uPapoC.xy) / uPapoR;
+        if (pq.y > 0.0) pq.y *= 1.6;   // para cima o inchaço acaba antes, longe da boca
+        float pw = max(0.0, 1.0 - dot(pq, pq)); pw *= pw;
+        pw *= smoothstep(-0.1, 0.3, normal.z) * smoothstep(uPapoC.z - 0.45, uPapoC.z - 0.25, position.z);
+        transformed += normalize(normal + vec3(0.0, -0.35, 0.6)) * uPapoAmt * pw;`);
+    sh.fragmentShader = 'uniform vec3 uBellyCol; uniform vec2 uBellyC, uBellyR; uniform float uBellyFloor, uBellyCeil; varying vec3 vBindPos; varying vec3 vBindNrm;' + String.fromCharCode(10) + sh.fragmentShader
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec2 q = (vBindPos.xy - uBellyC) / uBellyR;
+        float e = dot(q, q);
+        float aa = fwidth(e) * 1.5;
+        float m = (1.0 - smoothstep(1.0 - aa, 1.0 + aa, e))
+                * smoothstep(0.05, 0.2, normalize(vBindNrm).z)          // só a frente
+                * smoothstep(uBellyFloor - 0.005, uBellyFloor + 0.005, vBindPos.y)
+                * (1.0 - smoothstep(uBellyCeil - 0.005, uBellyCeil + 0.005, vBindPos.y));
+        diffuseColor.rgb = mix(diffuseColor.rgb, uBellyCol, m);`);
+  };
+  mat.customProgramCacheKey = () => 'belly';
+  mat.needsUpdate = true;
+}
+const hatHair = { on: { value: 0 }, brimY: { value: 0 }, r: { value: 0.2 }, h: { value: 0.2 }, slope: { value: 0 }, cz: { value: 0 } };
+function hairUnderHat(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    Object.assign(sh.uniforms, { uHatOn: hatHair.on, uBrimY: hatHair.brimY, uCrownR: hatHair.r, uCrownH: hatHair.h, uSlope: hatHair.slope, uCz: hatHair.cz });
+    sh.vertexShader = 'uniform float uHatOn, uBrimY, uCrownR, uCrownH, uSlope, uCz;' + String.fromCharCode(10) + sh.vertexShader
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        // com o chapéu na cabeça, o que passa da aba (cabelo espetado) é recolhido para dentro da copa
+        float by = uBrimY + uSlope * position.z;                       // aba inclinada: mais alta na frente
+        // embaixo da aba o cabelo fica como é (cheio nas têmporas); só o que passa da aba entra na copa
+        float hk = uHatOn * smoothstep(by - 0.015, by + 0.025, position.y);
+        vec2 cc = vec2(0.0, uCz);                                       // eixo da copa (peruca: um pouco para a frente)
+        float hr = length(position.xz - cc);
+        if (hr > uCrownR) transformed.xz = mix(transformed.xz, cc + (position.xz - cc) * (uCrownR / hr), hk);
+        transformed.y = mix(transformed.y, by + min(position.y - by, uCrownH) * 0.75, hk * step(by, position.y));`);
+  };
+  mat.customProgramCacheKey = () => 'hathair';
+  mat.needsUpdate = true;
+}
+const swayU = { hair: { value: new THREE.Vector3() }, coat: { value: new THREE.Vector3() }, wig: { value: new THREE.Vector3() } };
+// lava (cabelo da Valéria): degradê por altura — vinho embaixo, vermelho, laranja, amarelo e miolo quase branco no alto
+// do centro (como no sprite) —, brilho próprio (metade sem luz) e um fluxo lento que sobe pela massa
+const lavaU = { time: { value: 0 } };
+function lavaShader(mat, box) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    Object.assign(sh.uniforms, { uLavaT: lavaU.time, uLMin: { value: box.min.clone() }, uLMax: { value: box.max.clone() } });
+    sh.vertexShader = 'varying vec3 vLavaP; varying float vLock; attribute float _lock;' + String.fromCharCode(10) + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + String.fromCharCode(10) + 'vLavaP = position; vLock = _lock;');
+    sh.fragmentShader = 'uniform float uLavaT; uniform vec3 uLMin, uLMax; varying vec3 vLavaP; varying float vLock;' + String.fromCharCode(10) + sh.fragmentShader
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec3 q = (vLavaP - uLMin) / (uLMax - uLMin);                 // 0..1 dentro da caixa do cabelo
+        float flow = 0.045 * sin(q.x * 13.0 + uLavaT * 1.3) * sin(q.z * 11.0 - uLavaT * 0.9) + 0.03 * sin((q.y * 9.0 - uLavaT * 0.7) * 3.0);
+        float t = clamp(q.y + flow, 0.0, 1.0);
+        float core = smoothstep(0.62, 0.95, q.y) * (1.0 - smoothstep(0.12, 0.42, length(q.xz - vec2(0.5, 0.45))));
+        vec3 c = mix(vec3(0.55, 0.04, 0.10), vec3(0.88, 0.16, 0.08), smoothstep(0.05, 0.35, t));
+        c = mix(c, vec3(1.0, 0.45, 0.04), smoothstep(0.35, 0.62, t));
+        c = mix(c, vec3(1.0, 0.76, 0.12), smoothstep(0.62, 0.85, t));
+        c = mix(c, vec3(1.0, 0.95, 0.80), core);
+        if (vLock > 0.5 && vLock < 1.5) c = mix(vec3(1.0, 0.42, 0.05), vec3(1.0, 0.84, 0.16), smoothstep(0.42, 0.72, q.y + flow));   // franja: amarelo com ponta laranja
+        else if (vLock > 1.5 && vLock < 3.0) {   // tufo do rabo: laranja embaixo, amarelo, creme no alto (altura ao longo do rabo)
+          float h = clamp((vLock - 2.0) / 0.9 + flow, 0.0, 1.0);
+          c = mix(vec3(1.0, 0.45, 0.05), vec3(1.0, 0.82, 0.14), smoothstep(0.0, 0.45, h)); c = mix(c, vec3(1.0, 0.95, 0.78), smoothstep(0.6, 0.95, h));
+        } else if (vLock > 3.0) c = vec3(0.23, 0.13, 0.08);   // prendedor marrom-escuro
+        diffuseColor.rgb = c;`)
+      .replace('#include <opaque_fragment>', 'outgoingLight = mix(outgoingLight, diffuseColor.rgb, 0.35);   // brilha por conta própria (o volume ainda aparece)' + String.fromCharCode(10) + '#include <opaque_fragment>');
+  };
+  mat.customProgramCacheKey = () => 'lava';
+  mat.needsUpdate = true;
+}
+// guarda-chuva da Valéria (código): cabo de madeira, haste, ponteira e 8 gomos coloridos que abrem e fecham (as varetas
+// giram em volta da ponta). Origem no punho; a haste é o +Y local. setOpen(0..1).
+function makeUmbrella() {
+  const g = new THREE.Group(), L = 0.42, R = 0.32, N = 8, NU = 6, NV = 8;
+  const wood = new THREE.MeshStandardMaterial({ color: 0x7a4a24 }), dark = new THREE.MeshStandardMaterial({ color: 0x4a2c16 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, L, 10), dark); shaft.position.y = L / 2; g.add(shaft);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.021, 0.16, 12), wood); grip.position.y = -0.02; g.add(grip);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 8), wood); cap.position.y = -0.1; g.add(cap);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.07, 10), wood); tip.position.y = L + 0.03; g.add(tip);
+  const COLS = [0xe2321c, 0xffd21f, 0xff7a12, 0x19c7cf];
+  const gores = [];
+  for (let i = 0; i < N; i++) {
+    const geo = new THREE.BufferGeometry(); const pos = new Float32Array((NU + 1) * (NV + 1) * 3); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const idx = []; for (let v = 0; v < NV; v++) for (let u = 0; u < NU; u++) { const a = v * (NU + 1) + u, b = a + 1, c = a + NU + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+    geo.setIndex(idx);
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: COLS[i % 4], side: THREE.DoubleSide })); g.add(m); gores.push(m);
+  }
+  const tipsG = []; for (let i = 0; i < N; i++) { const t = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), dark); g.add(t); tipsG.push(t); }   // ponteirinhas das varetas
+  g.userData.setOpen = o => {
+    const th = THREE.MathUtils.lerp(0.1, 1.2, o);           // ângulo da vareta com a haste (fechado ~6°, aberto ~69°)
+    for (let i = 0; i < N; i++) {
+      const pos = gores[i].geometry.attributes.position;
+      for (let v = 0; v <= NV; v++) for (let u = 0; u <= NU; u++) {
+        const t = v / NV, w = u / NU, phi = (i + w) / N * Math.PI * 2;
+        const bow = Math.sin(Math.PI * w);                      // entre as varetas o pano fica um pouco para dentro (barra recortada)
+        const a = th * (0.55 + 0.45 * t) * (1 - 0.06 * bow * o);  // cúpula: a vareta curva para fora no fim
+        const r = R * t * (1 - 0.05 * bow * t);
+        pos.setXYZ(v * (NU + 1) + u, Math.sin(a) * r * Math.cos(phi), L - Math.cos(a) * r * (0.9 + 0.1 * o) - 0.01 * (1 - o) * t, Math.sin(a) * r * Math.sin(phi));
+      }
+      pos.needsUpdate = true; gores[i].geometry.computeVertexNormals(); gores[i].geometry.computeBoundingSphere();
+      const phi = i / N * Math.PI * 2, a = th;
+      tipsG[i].position.set(Math.sin(a) * R * Math.cos(phi), L - Math.cos(a) * R * (0.9 + 0.1 * o), Math.sin(a) * R * Math.sin(phi));
+    }
+  };
+  g.userData.setOpen(1);
+  return g;
+}
+function wigTipShader(mat) {   // peruca com _sway_hair (0 na raiz, 1 na ponta): as pontas atrasam no movimento
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    sh.uniforms.uWigOff = swayU.wig;
+    sh.vertexShader = 'uniform vec3 uWigOff; attribute float _sway_hair;' + String.fromCharCode(10) + sh.vertexShader
+      .replace('#include <begin_vertex>', '#include <begin_vertex>' + String.fromCharCode(10) + 'transformed += uWigOff * _sway_hair;');
+  };
+  mat.customProgramCacheKey = () => 'wigtip';
+  mat.needsUpdate = true;
+}
+function swayShader(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    Object.assign(sh.uniforms, { uHairOff: swayU.hair, uCoatOff: swayU.coat });
+    sh.vertexShader = 'uniform vec3 uHairOff, uCoatOff; attribute float _sway_hair; attribute float _sway_coat; attribute float _shirt; varying float vCoatW; varying float vShirt; varying vec3 vBP;' + String.fromCharCode(10) + sh.vertexShader
+      .replace('#include <skinning_vertex>', '#include <skinning_vertex>' + String.fromCharCode(10) +
+        'vCoatW = _sway_coat; vShirt = _shirt; vBP = position;' + String.fromCharCode(10) +
+        'transformed += uHairOff * _sway_hair + uCoatOff * _sway_coat;   // pontas do cabelo e abas do casaco atrasam no movimento');
+    if (CHAR.suit) {
+      const U = CHAR.suit;
+      Object.assign(sh.uniforms, { uTop: { value: new THREE.Color(U.top) }, uPants: { value: new THREE.Color(U.pants) } });
+      sh.fragmentShader = 'uniform vec3 uTop, uPants; varying float vCoatW; varying float vShirt; varying vec3 vBP;' + String.fromCharCode(10) + sh.fragmentShader
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          vec3 tc = diffuseColor.rgb; float lum = dot(tc, vec3(0.3, 0.59, 0.11));
+          bool cyan = tc.b > tc.r * 1.6 && tc.g > tc.r * 1.4;
+          if (lum < ${U.dark.toFixed(3)} && !cyan && vBP.y > ${U.bootY.toFixed(3)} && vBP.y < ${U.neckY.toFixed(3)} && abs(vBP.x) < ${U.halfW.toFixed(3)}) {
+            float k = lum / ${U.dark.toFixed(3)};   // mantém o claro/escuro da textura
+            diffuseColor.rgb = (vBP.y < ${U.waistY.toFixed(3)} ? uPants : uTop) * (0.75 + 0.5 * k);
+          }`);
+      return;
+    }
+    if (!CHAR.outfit) return;
+    // roupa: favos de mel na barra do casaco e cor nova da camisa (por cima da textura, no espaço do corpo em repouso)
+    const O = CHAR.outfit;
+    Object.assign(sh.uniforms, { uSkin: { value: new THREE.Color(O.skin) }, uShirt: { value: new THREE.Color(O.shirt) }, uHexCol: { value: new THREE.Color(O.hex) }, uHoney: { value: new THREE.Color(O.honey) } });
+    sh.fragmentShader = 'uniform vec3 uSkin, uShirt, uHexCol, uHoney; varying float vCoatW; varying float vShirt; varying vec3 vBP;' + String.fromCharCode(10) + sh.fragmentShader
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        vec3 tc = diffuseColor.rgb;
+        bool greenish = tc.g > tc.r * 1.08 && tc.g > tc.b * 1.05;
+        // camisa: região marcada no Blender (marcar_regiao.py), parando na beira do casaco
+        // camisa: região marcada no Blender (para na beira do casaco) + faixa central de segurança (pega as manchas
+        // verdes que o Meshy pintou perto do cinto); acima do decote em U volta a ser pescoço
+        float neck = ${O.neckY.toFixed(3)} + 4.0 * vBP.x * vBP.x;   // decote em U: mais baixo no meio, sobe nas laterais
+        bool front = vBP.z > 0.0 && vBP.y > ${O.shirtY0.toFixed(3)};
+        bool core = front && abs(vBP.x) < ${O.coreHalfW.toFixed(3)} && vBP.y < neck;   // faixa central: tudo abaixo do decote é camisa (decote liso, sem ponta)
+        if ((vShirt > 0.005 || core) && front) {
+          if (vBP.y > neck) diffuseColor.rgb = uSkin;
+          else {
+            diffuseColor.rgb = uShirt;
+            // favos miúdos no tecido (mostarda um pouco mais escuro)
+            vec2 hp = vBP.xy / ${O.shirtHex.toFixed(4)};
+            const vec2 hs2 = vec2(1.0, 1.7320508);
+            vec4 c2 = floor(vec4(hp, hp - vec2(0.5, 1.0)) / hs2.xyxy) + 0.5;
+            vec4 h2 = vec4(hp - c2.xy * hs2, hp - (c2.zw + 0.5) * hs2);
+            vec2 g2 = dot(h2.xy, h2.xy) < dot(h2.zw, h2.zw) ? h2.xy : h2.zw;
+            vec2 a2 = abs(g2); float d2 = max(dot(a2, hs2 * 0.5), a2.x);
+            diffuseColor.rgb *= 1.0 - 0.14 * smoothstep(0.40, 0.45, d2);
+            // sombra só nas laterais (embaixo das abas do casaco), suave
+            float side = smoothstep(${(O.coreHalfW*0.6).toFixed(3)}, ${O.shirtHalfW.toFixed(3)}, abs(vBP.x));
+            diffuseColor.rgb *= 1.0 - 0.25 * side;
+            gTone = max(gTone, side * 0.6);
+          }
+        }
+        // emblema nas costas: 3 favos em triângulo, centralizados entre as omoplatas (mel com contorno escuro)
+        if (vBP.z < -0.04 && abs(vBP.x) < 0.2 && greenish && vShirt < 0.005) {
+          // hexágono de ponta para cima, apótema a: dentro se max(|x|, 0.5|x| + 0.866|y|) < a. Três encaixados.
+          float a = ${O.backR.toFixed(3)}, R = a / 0.866;
+          vec2 base = vec2(0.0, ${O.backY.toFixed(3)});
+          vec2 cs[3]; cs[0] = base + vec2(0.0, 0.75 * R); cs[1] = base + vec2(-a, -0.75 * R); cs[2] = base + vec2(a, -0.75 * R);
+          // coordenada que segue a curva das costas (comprimento do arco), senão o favo da lateral estica
+          vec2 bp = vec2(atan(vBP.x, -vBP.z) * length(vBP.xz), vBP.y);
+          float best = 9.0;
+          for (int i = 0; i < 3; i++) {
+            vec2 q = abs(bp - cs[i]);
+            best = min(best, max(q.x, 0.5 * q.x + 0.866 * q.y) / a);   // 1.0 = borda
+          }
+          if (best < 1.0) diffuseColor.rgb = mix(uHoney, uHexCol, smoothstep(0.80, 0.86, best));   // contorno escuro na borda de cada favo
+        }
+        // favos: grade hexagonal em volta do corpo (ângulo x altura), só na barra do casaco
+        if (vCoatW > ${O.hexFrom.toFixed(3)} && greenish) {
+          vec2 p = vec2(atan(vBP.x, vBP.z) * 0.2, vBP.y) / ${O.hexCell.toFixed(4)};
+          const vec2 hs = vec2(1.0, 1.7320508);
+          vec4 hc = floor(vec4(p, p - vec2(0.5, 1.0)) / hs.xyxy) + 0.5;
+          vec4 hh = vec4(p - hc.xy * hs, p - (hc.zw + 0.5) * hs);
+          vec2 g = dot(hh.xy, hh.xy) < dot(hh.zw, hh.zw) ? hh.xy : hh.zw;
+          vec2 ag = abs(g); float hd = max(dot(ag, hs * 0.5), ag.x);
+          float edge = smoothstep(0.40, 0.44, hd) * smoothstep(${O.hexFrom.toFixed(3)}, ${(O.hexFrom + 0.08).toFixed(3)}, vCoatW);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uHexCol, edge);
+        }`);
+  };
+  const key = mat.customProgramCacheKey ? mat.customProgramCacheKey() : '';
+  mat.customProgramCacheKey = () => key + 'sway';
+  mat.needsUpdate = true;
+}
+function toonify(root) {
+  const outlines = [];
+  root.traverse(o => {
+    if (!o.isMesh || o.userData.isOutline) return;
+    const old = o.material;
+    o.material = comicShader(new THREE.MeshToonMaterial({ map: old.map || null, color: old.map ? 0xffffff : (old.color || 0xffffff), gradientMap: ramp }));
+    if (o.material.map) o.material.map.colorSpace = THREE.SRGBColorSpace;
+    // sem mipmap: a textura do Meshy é picotada em ilhas e o mipmap puxa a cor da ilha vizinha (fios brancos nas costuras)
+    if (o.material.map) { o.material.map.generateMipmaps = false; o.material.map.minFilter = THREE.LinearFilter; o.material.map.needsUpdate = true; }
+    // casca invertida: mesma geometria e esqueleto, vértices empurrados na normal DEPOIS do skinning
+    const mat = new THREE.MeshBasicMaterial({ color: 0x0b0710, side: THREE.BackSide });
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.uOutline = outlineUniform;
+      sh.vertexShader = 'uniform float uOutline;\n' + sh.vertexShader
+        .replace('#include <skinning_vertex>', '#include <skinning_vertex>\n  #ifdef USE_SKINNING\n  vec3 nrm = normalize((skinMatrix * vec4(normal,0.0)).xyz);\n  #else\n  vec3 nrm = normalize(normal);\n  #endif\n  transformed += nrm * uOutline;');
+    };
+    // o Meshy separa vértices nas costuras da textura; a casca precisa da malha soldada, senão abre rasgos
+    const g = o.geometry.clone(); for (const k of Object.keys(g.attributes)) if (!['position', 'skinIndex', 'skinWeight'].includes(k)) g.deleteAttribute(k);
+    const welded = mergeVertices(g, 1e-4); welded.computeVertexNormals();
+    const hull = o.isSkinnedMesh ? new THREE.SkinnedMesh(welded, mat) : new THREE.Mesh(welded, mat);
+    if (o.isSkinnedMesh) hull.bind(o.skeleton, o.bindMatrix);
+    hull.userData.isOutline = true;
+    outlines.push([o, hull]);
+  });
+  if (OUTLINE_MODE === 'casca') for (const [o, hull] of outlines) { o.parent.add(hull); hull.position.copy(o.position); hull.quaternion.copy(o.quaternion); hull.scale.copy(o.scale); }
+}
+
+// ---------------------------------------------------------------- IK de dois ossos (independe do eixo local dos ossos)
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion();
+function rotateBoneWorld(bone, from, to) {
+  if (from.lengthSq() < 1e-12 || to.lengthSq() < 1e-12) return;
+  _q.setFromUnitVectors(from.clone().normalize(), to.clone().normalize());
+  bone.getWorldQuaternion(_pq);
+  const wanted = _q.multiply(_pq);
+  bone.parent.getWorldQuaternion(_pq);
+  bone.quaternion.copy(_pq.invert().multiply(wanted));
+  bone.updateMatrixWorld(true);
+}
+function solveIK(upper, lower, hand, target, pole) {
+  upper.getWorldPosition(_a); lower.getWorldPosition(_b); hand.getWorldPosition(_c);
+  const l1 = _a.distanceTo(_b), l2 = _b.distanceTo(_c);
+  const toT = target.clone().sub(_a); const d = Math.min(toT.length(), (l1 + l2) * 0.999); toT.setLength(d);
+  const cosA = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+  const dir = toT.clone().normalize(), side = pole.clone().sub(_a).projectOnPlane(dir);
+  // polo alinhado com o alvo: o lado some e vira NaN (o braço sumia de vez). Usa "para baixo" como reserva.
+  if (side.lengthSq() < 1e-8) side.copy(new THREE.Vector3(0, -1, 0).projectOnPlane(dir));
+  if (side.lengthSq() < 1e-8) side.set(1, 0, 0).projectOnPlane(dir);
+  side.normalize();
+  const elbow = _a.clone().addScaledVector(dir, l1 * cosA).addScaledVector(side, l1 * sinA);
+  rotateBoneWorld(upper, _b.clone().sub(_a), elbow.clone().sub(_a));
+  lower.getWorldPosition(_b); hand.getWorldPosition(_c);
+  rotateBoneWorld(lower, _c.clone().sub(_b), _a.clone().add(toT).sub(_b));
+}
+
+// ---------------------------------------------------------------- rosto 2.5D (canvas), papo, coroa
+function faceCanvas(draw) { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); draw(g); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+const INK = '#0f1c10';
+// olhos do King Frog no jogo: bloco preto com o topo caindo para dentro (cara de mau) e um ponto branco de brilho
+function gameEye(g, slope, glint = true) {
+  g.fillStyle = INK; g.beginPath(); g.moveTo(14, 34 - slope * 0.2); g.lineTo(114, 34 + slope); g.lineTo(114, 104); g.lineTo(14, 104); g.closePath(); g.fill();
+  if (glint) { g.fillStyle = '#ffffff'; g.fillRect(70, 62, 18, 18); }
+}
+const EYES = {
+  normal: g => gameEye(g, 22),
+  angry: g => gameEye(g, 46),
+  pain: g => { g.lineWidth = 16; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = INK; g.beginPath(); g.moveTo(26, 30); g.lineTo(100, 66); g.lineTo(26, 102); g.stroke(); },
+  ko: g => { g.lineWidth = 16; g.lineCap = 'round'; g.strokeStyle = INK; g.beginPath(); g.moveTo(30, 30); g.lineTo(98, 98); g.moveTo(98, 30); g.lineTo(30, 98); g.stroke(); },
+  grit: g => gameEye(g, 52),   // carregando: raiva no máximo
+  // acumulando (língua/lama): olho serrado, só uma fenda inclinada
+  // acumulando (língua/lama): olho de raiva serrado, fenda fina com a sobrancelha caindo forte para dentro + brilho
+  squint: g => { g.fillStyle = INK; g.beginPath(); g.moveTo(12, 52); g.lineTo(116, 84); g.lineTo(116, 100); g.lineTo(12, 76); g.closePath(); g.fill(); g.fillStyle = '#ffffff'; g.fillRect(72, 76, 12, 10); },
+};
+const MOUTH = {
+  normal: g => { g.lineWidth = 7; g.lineCap = 'round'; g.strokeStyle = INK; g.beginPath(); g.moveTo(10, 70); g.quadraticCurveTo(64, 56, 118, 70); g.stroke(); },
+  angry: g => { g.lineWidth = 8; g.lineCap = 'round'; g.strokeStyle = INK; g.beginPath(); g.moveTo(10, 66); g.quadraticCurveTo(64, 52, 118, 66); g.stroke(); },
+  pain: g => { g.fillStyle = '#f8f4e6'; g.strokeStyle = INK; g.lineWidth = 6; g.beginPath(); g.moveTo(12, 70); g.quadraticCurveTo(64, 40, 116, 72); g.lineTo(112, 84); g.quadraticCurveTo(64, 62, 16, 82); g.closePath(); g.fill(); g.stroke(); g.lineWidth = 3; for (let x = 28; x < 110; x += 14) { g.beginPath(); g.moveTo(x, 56); g.lineTo(x, 80); g.stroke(); } },
+  ko: g => { g.fillStyle = '#2a0a12'; g.strokeStyle = INK; g.lineWidth = 6; g.beginPath(); g.ellipse(64, 70, 40, 16, 0, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#ff5c7a'; g.beginPath(); g.ellipse(84, 84, 14, 12, 0, 0, 7); g.fill(); },
+  // rangendo os dentes: faixa de dentes cerrados com os cantos para baixo
+  grit: g => { g.fillStyle = '#f8f4e6'; g.strokeStyle = INK; g.lineWidth = 6; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(14, 74); g.quadraticCurveTo(64, 56, 114, 74); g.lineTo(110, 90); g.quadraticCurveTo(64, 76, 18, 90); g.closePath(); g.fill(); g.stroke();
+    g.lineWidth = 3; g.beginPath(); g.moveTo(16, 82); g.quadraticCurveTo(64, 66, 112, 82); g.stroke();
+    for (let x = 30; x < 104; x += 12) { g.beginPath(); g.moveTo(x, 64 + Math.abs(x - 64) * 0.18); g.lineTo(x, 86 + Math.abs(x - 64) * 0.06); g.stroke(); } },
+  // acumulando: boca bem apertada, linha reta e firme
+  squint: g => { g.lineWidth = 9; g.lineCap = 'round'; g.strokeStyle = INK; g.beginPath(); g.moveTo(20, 70); g.quadraticCurveTo(64, 64, 108, 70); g.stroke(); },
+};
+const noseTex = faceCanvas(g => { g.fillStyle = INK; g.beginPath(); g.ellipse(34, 64, 13, 9, 0.35, 0, 7); g.fill(); g.beginPath(); g.ellipse(94, 64, 13, 9, -0.35, 0, 7); g.fill(); });
+// olho humano (Jack): branco em amêndoa, pupila escura, sobrancelha grossa por cima
+function humanEye(g, brow, lid = 0) {
+  g.fillStyle = '#ffffff'; g.strokeStyle = INK; g.lineWidth = 6;
+  g.beginPath(); g.ellipse(64, 74, 40, 24 - lid, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = INK; g.beginPath(); g.ellipse(70, 76, 14, Math.max(4, 16 - lid), 0, 0, 7); g.fill();
+  g.fillStyle = '#ffffff'; g.fillRect(74, 68, 6, 6);
+  g.fillStyle = '#5a3b12'; g.beginPath(); g.moveTo(16, 40 - brow * 0.2); g.lineTo(116, 34 + brow); g.lineTo(116, 50 + brow); g.lineTo(16, 54 - brow * 0.2); g.closePath(); g.fill();
+}
+if (CHAR.eyeStyle === 'human') {
+  EYES.normal = g => humanEye(g, 4); EYES.angry = g => humanEye(g, 16, 6); EYES.grit = g => humanEye(g, 20, 10); EYES.squint = g => humanEye(g, 16, 16);
+  MOUTH.normal = g => { g.lineWidth = 7; g.lineCap = 'round'; g.strokeStyle = INK; g.beginPath(); g.moveTo(34, 70); g.quadraticCurveTo(64, 74, 94, 68); g.stroke(); };
+}
+// Olhos e bocas do jogo original (jack.atlas: nome x y w h offX offY, num quadro de 360x360). Os olhos vêm num
+// sprite só (os dois juntos), por isso o Jack usa um decalque único para os olhos em vez de dois planos.
+// Rosto do jogo por personagem (engine-cpp/assets/sprites/<p>.atlas: nome x y w h offX offY, quadro WxW).
+// Uma expressão pode empilhar camadas (Marcov: olhos normais + sobrancelha = raiva). null = sem boca.
+const FACE_SPR = {
+  jack: { spr: { E_normal: [1894, 1086, 56, 17, 152, 113], E_angry: [1600, 1086, 60, 21, 150, 103], E_pain: [1248, 1086, 84, 38, 153, 90],
+                 E_x: [1778, 1086, 56, 19, 152, 109], E_tired: [1662, 1086, 56, 19, 152, 111], M_normal: [2140, 1086, 20, 8, 170, 146],
+                 M_grit: [1952, 1086, 34, 16, 163, 140], M_pain: [2088, 1086, 32, 14, 165, 141], M_oh: [1580, 1086, 18, 22, 171, 136] },
+          eBox: [130, 85, 100, 50], mBox: [141, 134, 74, 26],
+          faces: { normal: ['E_normal', 'M_normal'], angry: ['E_angry', 'M_grit'], pain: ['E_pain', 'M_pain'], ko: ['E_x', 'M_oh'],
+                   grit: ['E_angry', 'M_grit'], squint: ['E_tired', 'M_grit'] } },
+  marcov: { spr: { eyesN: [1731, 1980, 158, 37, 161, 134], nostrils: [1731, 2017, 158, 20, 161, 171], E_brows: [3007, 1980, 126, 21, 177, 124], E_lids: [3290, 1980, 130, 18, 175, 141],
+                   E_pain: [1566, 1980, 163, 90, 183, 86], E_x: [2863, 1980, 118, 41, 181, 138], M_grit: [3422, 1980, 38, 18, 221, 176],
+                   M_pain: [3253, 1980, 35, 19, 223, 177], M_oh: [2983, 1980, 22, 27, 229, 171] },
+            eBox: [130, 82, 220, 110], mBox: [210, 165, 60, 21], nBox: [195, 166, 90, 28],   // caixas centradas no x=240 do quadro (o rosto do jogo é centrado ali)
+            faces: { normal: [['eyesN'], null], angry: [['eyesN', 'E_brows'], 'M_grit'], pain: ['E_pain', 'M_pain'], ko: ['E_x', 'M_oh'],
+                     grit: [['eyesN', 'E_brows'], 'M_grit'], squint: [['eyesN', 'E_lids'], 'M_grit'] } },
+};
+// Valéria: rosto desenhado em código no estilo do sprite (olho amarelo quadrado de contorno grosso, brilho branco, risco
+// dourado em cima, cicatriz na bochecha). Cada olho e a boca são peças separadas; o modelo não tem nariz: nariz desenhado.
+function texOf(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+const V_GOLD = '#f4c430', V_YEL = '#ffd21f', V_RED = '#e0502a';
+function rrect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+// side: -1 olho da esquerda da tela, +1 da direita (o lado de dentro fica perto do nariz)
+function valEye(g, side, ex) {
+  const inner = side < 0 ? 1 : -1;            // direção do nariz no canvas
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  // risco dourado (sobrancelha): reto no normal, desce para dentro na raiva
+  const bIn = ex === 'angry' || ex === 'grit' ? 30 : ex === 'pain' ? 40 : 36, bOut = ex === 'angry' || ex === 'grit' ? 18 : ex === 'pain' ? 24 : 34;
+  const xi = 64 + inner * 46, xo = 64 - inner * 46;
+  g.strokeStyle = INK; g.lineWidth = 16; g.beginPath(); g.moveTo(xo, bOut); g.lineTo(xi, bIn); g.stroke();
+  g.strokeStyle = V_GOLD; g.lineWidth = 8; g.beginPath(); g.moveTo(xo, bOut); g.lineTo(xi, bIn); g.stroke();
+  if (ex === 'ko') {                          // X
+    g.strokeStyle = INK; g.lineWidth = 13; g.beginPath(); g.moveTo(36, 54); g.lineTo(92, 102); g.moveTo(92, 54); g.lineTo(36, 102); g.stroke();
+  } else if (ex === 'pain') {                 // olho espremido: > <
+    g.strokeStyle = INK; g.lineWidth = 12; g.beginPath(); g.moveTo(64 - inner * 30, 58); g.lineTo(64 + inner * 26, 78); g.lineTo(64 - inner * 30, 98); g.stroke();
+  } else {
+    const lid = ex === 'squint' ? 20 : ex === 'angry' || ex === 'grit' ? 8 : 0;
+    const y0 = 52 + lid, h = 50 - lid;
+    g.fillStyle = INK; rrect(g, 22, y0 - 7, 84, h + 14, 16); g.fill();
+    g.fillStyle = V_YEL; rrect(g, 30, y0, 68, h, 10); g.fill();
+    if (lid) { g.fillStyle = INK; g.beginPath(); g.moveTo(30, y0); g.lineTo(98, y0); g.lineTo(64 + inner * 34, y0 + (ex === 'squint' ? 6 : 12)); g.lineTo(64 - inner * 34, y0); g.fill(); }
+    g.fillStyle = '#ffffff'; g.fillRect(64 - inner * 10 - 9, y0 + 9, 16, 16);   // brilho
+  }
+  if (side < 0) {                             // cicatriz na bochecha da esquerda
+    g.strokeStyle = INK; g.lineWidth = 7; g.beginPath(); g.moveTo(8, 104); g.lineTo(30, 124); g.moveTo(20, 98); g.lineTo(42, 118); g.stroke();
+  }
+}
+function valMouth(g, ex) {                    // canvas 256x90 (a peça da boca tem altura 0,35 da largura)
+  g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = INK; g.lineWidth = 9;
+  if (ex === 'normal') {                      // sorriso aberto com dentes
+    g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(52, 22); g.quadraticCurveTo(128, 34, 204, 22); g.quadraticCurveTo(190, 82, 128, 82); g.quadraticCurveTo(66, 82, 52, 22); g.closePath(); g.fill(); g.stroke();
+  } else if (ex === 'angry' || ex === 'grit' || ex === 'squint') {   // dentes cerrados
+    g.fillStyle = '#ffffff'; rrect(g, 70, 26, 116, 40, 12); g.fill(); g.stroke();
+    g.lineWidth = 5; g.beginPath(); g.moveTo(74, 46); g.lineTo(182, 46); for (const x of [98, 128, 158]) { g.moveTo(x, 28); g.lineTo(x, 64); } g.stroke();
+  } else if (ex === 'pain') {                 // boca torta ondulada
+    g.beginPath(); g.moveTo(74, 52); g.quadraticCurveTo(92, 30, 110, 52); g.quadraticCurveTo(128, 72, 146, 52); g.quadraticCurveTo(164, 30, 182, 52); g.stroke();
+  } else {                                    // K.O.: "oh"
+    g.fillStyle = '#5a1a14'; g.beginPath(); g.ellipse(128, 48, 22, 28, 0, 0, 7); g.fill(); g.stroke();
+  }
+}
+const valNose = g => {                        // nariz: ponta arredondada com sombra embaixo (canvas 128)
+  g.lineCap = 'round'; g.strokeStyle = INK; g.lineWidth = 8;
+  g.fillStyle = 'rgba(120,55,30,0.45)'; g.beginPath(); g.ellipse(64, 84, 26, 10, 0, 0, 7); g.fill();
+  g.beginPath(); g.moveTo(48, 80); g.quadraticCurveTo(64, 96, 80, 80); g.stroke();
+  g.lineWidth = 6; g.beginPath(); g.moveTo(62, 30); g.quadraticCurveTo(54, 58, 56, 72); g.stroke();
+};
+// Lady Espinha: olho amarelo redondo de contorno grosso com sobrancelha preta reta, nariz em losango dourado, boca escura
+function espEye(g, side, ex) {   // olho do sprite: meia-lua preta (reta em cima, redonda embaixo) com argola amarela e centro preto
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const inner = side < 0 ? 1 : -1;
+  if (ex === 'ko') { g.strokeStyle = INK; g.lineWidth = 13; g.beginPath(); g.moveTo(38, 40); g.lineTo(90, 92); g.moveTo(90, 40); g.lineTo(38, 92); g.stroke(); return; }
+  if (ex === 'pain') { g.strokeStyle = INK; g.lineWidth = 12; g.beginPath(); g.moveTo(64 - inner * 30, 44); g.lineTo(64 + inner * 24, 64); g.lineTo(64 - inner * 30, 84); g.stroke(); return; }
+  const top = ex === 'squint' ? 46 : 30, tilt = ex === 'angry' || ex === 'grit' ? 12 : 0;   // raiva: canto de dentro mais baixo
+  g.fillStyle = INK; g.beginPath();
+  g.moveTo(64 - 52, top - (inner > 0 ? 0 : tilt)); g.lineTo(64 + 52, top - (inner > 0 ? tilt : 0));
+  g.quadraticCurveTo(64 + 52, 108, 64, 108); g.quadraticCurveTo(64 - 52, 108, 64 - 52, top - (inner > 0 ? 0 : tilt)); g.fill();
+  const py = Math.max(top + 26, 66), r = ex === 'squint' ? 14 : 19;
+  g.fillStyle = '#ffe414'; g.beginPath(); g.arc(64 + inner * 6, py, r, 0, 7); g.fill();
+  g.fillStyle = INK; g.beginPath(); g.arc(64 + inner * 6, py, r * 0.48, 0, 7); g.fill();
+}
+function espMouth(g, ex) {   // lábios verde-escuros com contorno (boca do sprite)
+  g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = INK; g.lineWidth = 7;
+  const lip = '#1e6b3e';
+  if (ex === 'normal') {
+    g.fillStyle = lip; g.beginPath(); g.moveTo(84, 44); g.quadraticCurveTo(104, 22, 128, 32); g.quadraticCurveTo(152, 22, 172, 44); g.quadraticCurveTo(128, 72, 84, 44); g.closePath(); g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(86, 44); g.quadraticCurveTo(128, 50, 170, 44); g.stroke();
+  } else if (ex === 'angry' || ex === 'grit' || ex === 'squint') {
+    g.fillStyle = lip; g.beginPath(); g.ellipse(128, 44, 46, 20, 0, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#ffffff'; g.fillRect(96, 38, 64, 12); g.strokeRect(96, 38, 64, 12);
+  } else if (ex === 'pain') { g.beginPath(); g.moveTo(88, 50); g.quadraticCurveTo(108, 30, 128, 48); g.quadraticCurveTo(148, 66, 168, 46); g.stroke(); }
+  else { g.fillStyle = '#2a1a14'; g.beginPath(); g.ellipse(128, 46, 18, 22, 0, 0, 7); g.fill(); g.stroke(); }
+}
+const espNose = g => {   // losango dourado com um X por dentro
+  g.fillStyle = '#f2b820'; g.strokeStyle = INK; g.lineWidth = 7; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(64, 18); g.lineTo(94, 64); g.lineTo(64, 110); g.lineTo(34, 64); g.closePath(); g.fill(); g.stroke();
+  g.lineWidth = 4; g.beginPath(); g.moveTo(49, 41); g.lineTo(79, 87); g.moveTo(79, 41); g.lineTo(49, 87); g.stroke();
+};
+const CODE_FACE = { valeria: { eye: (g, s, f) => valEye(g, s, f), mouth: (g, f) => valMouth(g, f), nose: g => valNose(g) }, espinha: { eye: espEye, mouth: espMouth, nose: espNose } };
+FACE_SPR.valeria = { spr: { eyesN: [3367, 4944, 110, 69, 169, 129], E_brows: [1033, 5162, 110, 22, 180, 127], E_lids: [1247, 5162, 114, 19, 178, 145],
+                            E_pain: [3215, 4944, 150, 94, 186, 87], E_x: [906, 5162, 101, 43, 185, 142], M_grit: [1363, 5162, 39, 19, 216, 180],
+                            M_pain: [1404, 5162, 35, 18, 218, 182], M_oh: [1009, 5162, 22, 27, 224, 176], M_grin: [1441, 5162, 41, 16, 215, 183] },
+                     eBox: [157, 122, 160, 80], mBox: [207, 168, 60, 28], clipX: 197,   // olhos centrados no x=237 do quadro; clipX corta a mecha de cabelo do sprite (o cabelo é 3D)
+                     faces: { normal: [['eyesN'], null], angry: [['eyesN', 'E_brows'], 'M_grit'], pain: ['E_pain', 'M_pain'], ko: ['E_x', 'M_oh'],
+                              grit: [['eyesN', 'E_brows'], 'M_grit'], squint: [['eyesN', 'E_lids'], 'M_grit'] } };
+const FS = FACE_SPR[CHAR.dir];
+const E_BOX = FS ? FS.eBox : [0, 0, 1, 1], M_BOX = FS ? FS.mBox : [0, 0, 1, 1];
+const SPR_FACES = FS ? FS.faces : {};
+function spriteCanvas(img, name, box) {
+  const k = 4, c = document.createElement('canvas'); c.width = box[2] * k; c.height = box[3] * k;
+  for (const n of name ? [].concat(name) : []) {
+    const [x, y, w, h, ox, oy] = FS.spr[n];
+    c.getContext('2d').drawImage(img, x, y, w, h, (ox - box[0]) * k, (oy - box[1]) * k, w * k, h * k);
+  }
+  if (FS.clipX != null && box === E_BOX) c.getContext('2d').clearRect(0, 0, (FS.clipX - box[0]) * k, c.height);   // só no recorte inteiro
+  else if (FS.clipX != null && box[0] === E_BOX[0]) c.getContext('2d').clearRect(0, 0, (FS.clipX - box[0]) * k, c.height);   // metade esquerda
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const faceTex = {}; for (const k of Object.keys(EYES)) faceTex[k] = { eye: faceCanvas(EYES[k]), mouth: faceCanvas(MOUTH[k]) };
+// depthWrite false: o rosto 2.5D não entra no buffer de profundidade, então o contorno (e o vinco) não desenha borda preta nele
+const planeMat = t => new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+
+// ---------------------------------------------------------------- boca: decalque na curva do rosto + interior 3D
+// A linha da boca é uma malha projetada na pele (não um plano reto que afunda nas bochechas).
+// Aberta, vira um "portal": a abertura marca o estêncil, apaga a profundidade só ali, e o interior (céu da boca
+// e língua) aparece por dentro da cabeça. A língua sai pela abertura e continua visível fora do rosto.
+const bodyMeshes = [], rayHead = [];
+let headRest = null;
+let mouthKey = '', mouthParts = null;
+const _ray = new THREE.Raycaster(), _headRestInv = new THREE.Matrix4();
+function decal(center, w, h, nu, nv, lift) {
+  const head = bones.Head, q = faceRest.q0;
+  const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q), right = new THREE.Vector3(1, 0, 0).applyQuaternion(q), up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+  const pos = [], uv = [], idx = [];
+  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) {
+    const u = i / nu, v = j / nv;
+    const p = center.clone().addScaledVector(right, (u - 0.5) * w).addScaledVector(up, (v - 0.5) * h);
+    // raio no espaço da cabeça em repouso (a cópia estática está nessa pose)
+    const o = p.clone().addScaledVector(fwd, 0.6).applyMatrix4(headRest), d = p.clone().applyMatrix4(headRest).sub(o).normalize();
+    _ray.set(o, d); _ray.far = 1.5;
+    const hit = _ray.intersectObjects(rayHead, false)[0];
+    const sp = hit ? hit.point.clone().applyMatrix4(_headRestInv.copy(headRest).invert()) : p;
+    sp.addScaledVector(fwd, lift);
+    pos.push(sp.x, sp.y, sp.z); uv.push(u, v);
+  }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1; idx.push(a, b, d, a, d, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  const k = (nv >> 1) * (nu + 1) + (nu >> 1);
+  return { g, fwd, up, surface: new THREE.Vector3(pos[k * 3], pos[k * 3 + 1], pos[k * 3 + 2]) };
+}
+const mouthOpenU = { value: 0 };
+const PORTAL_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+// abertura: o lábio de cima fica na linha da boca, o queixo desce conforme abre
+const mouthRoundU = { value: 0 };
+const PORTAL_SHAPE = 'uniform float uOpen, uRound; varying vec2 vUv;' +
+  ' bool inside(){ float top = 0.80, bot = top - 0.62 * uOpen, c = (top + bot) * 0.5, hh = max(0.001, (top - bot) * 0.5);' +
+  ' float x = (vUv.x - 0.5) / mix(0.44, 0.13, uRound), y = (vUv.y - c) / hh; return x * x + y * y < 1.0 && uOpen > 0.01; }';
+function buildMouthInterior(fp) {
+  const stencilMask = new THREE.ShaderMaterial({ uniforms: { uOpen: mouthOpenU, uRound: mouthRoundU }, vertexShader: PORTAL_VS,
+    fragmentShader: PORTAL_SHAPE + ' void main(){ if (!inside()) discard; gl_FragColor = vec4(0.0); }',
+    colorWrite: false, depthWrite: false, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc, stencilZPass: THREE.ReplaceStencilOp,
+    polygonOffset: true, polygonOffsetFactor: -6 });
+  const depthHole = new THREE.ShaderMaterial({ uniforms: { uOpen: mouthOpenU, uRound: mouthRoundU }, vertexShader: PORTAL_VS,
+    fragmentShader: PORTAL_SHAPE + ' void main(){ if (!inside()) discard; gl_FragColor = vec4(0.0); gl_FragDepth = 1.0; }',
+    colorWrite: false, depthWrite: true, depthFunc: THREE.AlwaysDepth, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc,
+    stencilZPass: THREE.KeepStencilOp, stencilWriteMask: 0 });
+  const throughHole = m => Object.assign(m, { stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc, stencilZPass: THREE.KeepStencilOp, stencilWriteMask: 0 });
+  const mask = new THREE.Mesh(new THREE.BufferGeometry(), stencilMask); mask.renderOrder = 10;
+  const hole = new THREE.Mesh(new THREE.BufferGeometry(), depthHole); hole.renderOrder = 11;
+  // céu da boca: bolsa vista por dentro, vermelho-escuro, com a garganta mais escura no fundo
+  const cavity = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), throughHole(comicShader(new THREE.MeshToonMaterial({ color: '#5a1626', gradientMap: ramp, side: THREE.BackSide }))));
+  cavity.renderOrder = 12;
+  const throat = new THREE.Mesh(new THREE.CircleGeometry(1, 24), throughHole(new THREE.MeshBasicMaterial({ color: '#1c0509' })));
+  throat.renderOrder = 13;
+  // língua: raiz no fundo da boca, cresce em +Z (para fora); ponta arredondada e mais grossa
+  const tongue = new THREE.Group();
+  const tMat = comicShader(new THREE.MeshToonMaterial({ color: '#e8607a', gradientMap: ramp }));
+  // corrente de gomos: a raiz gira (varredura) e cada junta dobra um pouco atrás -> a língua faz curva de chicote
+  const N = 14, joints = [];
+  let parent = tongue;
+  for (let i = 0; i < N; i++) {
+    const j = new THREE.Group(); parent.add(j); joints.push(j);
+    const r0 = 0.065 - 0.015 * i / N, r1 = 0.065 - 0.015 * (i + 1) / N;
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, 1, 14, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5), tMat);
+    seg.renderOrder = 14; j.add(seg); j.userData.seg = seg;
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(r0, 14, 10), tMat); knot.renderOrder = 14; j.add(knot);   // junta redonda: sem fresta na dobra
+    parent = j;
+  }
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.095, 20, 14).scale(1.15, 0.7, 1), tMat);
+  tip.renderOrder = 14; parent.add(tip);
+  fp.add(mask, hole, cavity, throat, tongue);
+  mouthParts = { mask, hole, cavity, throat, tongue, joints, tip, mat: tMat, rest: 0.14 };
+}
+function layoutMouth(center, w, lift) {
+  const line = decal(center, w, w * 0.35, 28, 6, lift);
+  mouth.geometry.dispose(); mouth.geometry = line.g;
+  const open = decal(center.clone().addScaledVector(line.up, -w * 0.12), w * 0.95, w * 0.62, 28, 14, lift * 0.5);
+  for (const m of [mouthParts.mask, mouthParts.hole]) { m.geometry.dispose(); m.geometry = open.g; }
+  // interior atrás da superfície: centro um pouco abaixo da linha e para dentro da cabeça
+  const { fwd, up } = line, S = line.surface;
+  Object.assign(mouthParts, { S: S.clone(), fwd: fwd.clone(), up: up.clone() });
+  const look = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), fwd);
+  const c = S.clone().addScaledVector(fwd, -0.17).addScaledVector(up, -0.09);
+  mouthParts.cavity.position.copy(c); mouthParts.cavity.quaternion.copy(look); mouthParts.cavity.scale.set(w * 0.46, 0.13, 0.2);
+  mouthParts.throat.position.copy(c).addScaledVector(fwd, -0.18); mouthParts.throat.quaternion.copy(look); mouthParts.throat.scale.setScalar(0.07);
+  mouthParts.tongue.position.copy(S).addScaledVector(fwd, -0.3).addScaledVector(up, -0.07); mouthParts.tongue.quaternion.copy(look);   // sai reto pela abertura, sem raspar o queixo
+}
+function setTongue(len, yaw = 0, bend = 0) {
+  const P = mouthParts, n = P.joints.length, step = len / n;
+  P.tongue.rotation.set(0, 0, 0);
+  P.joints.forEach((j, i) => { j.position.set(0, 0, i ? step : 0); j.rotation.set(0, i ? bend : yaw, 0); j.userData.seg.scale.set(1, 1, step); });
+  P.tip.position.set(0, 0, step);
+  // recolhida, a língua só aparece pela abertura da boca (senão a ponta fura o queixo por fora);
+  // esticada, ela sai do rosto e precisa aparecer em qualquer lugar
+  const out = len > P.rest + 0.08;
+  for (const m of [P.mat]) if (m.stencilWrite !== !out) {
+    Object.assign(m, out ? { stencilWrite: false } : { stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc, stencilZPass: THREE.KeepStencilOp, stencilWriteMask: 0 });
+  }
+}
+// lançar a língua: papo infla (aviso) -> boca abre -> língua estica -> volta -> fecha
+let tongueT = -1;
+const tongueBody = { yaw: 0, roll: 0 };
+function tongueAnim(dt) {
+  if (tongueT < 0) { tongueBody.yaw = tongueBody.roll = 0; return 0; }
+  tongueT += dt;
+  const warn = GAME.tell, R = mouthParts.rest, L = 1.9;
+  const SW = THREE.MathUtils.degToRad(45);            // abertura da varredura da língua (a cabeça e o tronco somam o resto)
+  let open = 0, len = R, yaw = 0, bend = 0;
+  if (tongueT < warn - 0.2) papoTarget = 4; else if (tongueT < warn) papoTarget = 0;   // esvazia antes de abrir
+  else {
+    papoTarget = 0;
+    const k = tongueT - warn, T = GAME.tongue, hit = GAME.tongueHit;
+    open = Math.min(1, k / 0.05);
+    const ext = THREE.MathUtils.smoothstep(k, 0.02, hit);                 // estica até o quadro do acerto
+    const ret = THREE.MathUtils.smoothstep(k, T * 0.7, T);                 // recolhe no fim
+    len = R + (L - R) * ext * (1 - ret);
+    // varredura: começa aberta para a esquerda e chicoteia para a direita (passa pela frente no acerto)
+    const sw = THREE.MathUtils.smoothstep(k, 0.02, T * 0.75);
+    yaw = SW * (1 - 2 * sw);
+    const swVel = (THREE.MathUtils.smoothstep(k + 0.01, 0.02, T * 0.75) - sw) / 0.01;   // velocidade da varredura
+    bend = SW * 0.1 * swVel * 0.12;                                                  // cada gomo fica para trás
+    if (k > T) open = Math.max(0, 1 - (k - T) / 0.08);
+    if (k > T + 0.2) tongueT = -1;   // espera a cabeça voltar inteira para a guarda
+  }
+  // o corpo puxa a chicotada: cabeça e tronco giram um pouco à frente da língua (que vem atrasada)
+  // antecipação: enquanto o papo enche e ele inclina para trás, a cabeça já vai virando para o lado de onde a
+  // língua sai; no acerto ela varre para o outro lado sem tranco (a curva é contínua do aviso até o fim)
+  if (tongueT < warn) {
+    tongueBody.yaw = 40 * THREE.MathUtils.smoothstep(tongueT, 0.12, warn); tongueBody.roll = 0;
+  } else {
+    const k = tongueT - warn, T = GAME.tongue;
+    const lead = THREE.MathUtils.smoothstep(k, 0.0, T * 0.75);
+    const back = 1 - THREE.MathUtils.smoothstep(k, T * 0.8, T + 0.2);           // volta macia para a guarda
+    tongueBody.yaw = 40 * (1 - 2 * lead) * back;
+    tongueBody.roll = THREE.MathUtils.clamp(-bend * 120, -10, 10) * back;     // inclina no sentido do chicote
+  }
+  setTongue(len, yaw, bend);
+  return open;
+}
+
+// ---------------------------------------------------------------- papo (bolsa vocal)
+// Sai da garganta logo abaixo da boca e cresce para a frente e para baixo. Estágios: 1 = pulsa, 2 = cheio,
+// 3 = esticado, 4 = no limite. Mesma cor clara da barriga, contorno de quadrinho.
+function buildPapo() {
+  const g = new THREE.Group();
+  const mat = comicShader(new THREE.MeshToonMaterial({ color: '#b8d68c', gradientMap: ramp }));
+  const sac = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), mat);
+  g.add(sac); g.userData.sac = sac;
+  return g;
+}
+// posição/forma do papo para o estágio (0..4); w = tremida da mola
+function layoutPapo(stage, wob) {
+  if (!mouthParts.S) return;
+  if (!papoSkin.ready && headRest) {
+    // centro do papo no espaço do corpo em repouso: logo abaixo da linha da boca, na frente da garganta
+    const c = mouthParts.S.clone().addScaledVector(mouthParts.up, -0.16).applyMatrix4(headRest);
+    papoSkin.c.value.copy(c); papoSkin.ready = true;
+  }
+  papoSkin.amt.value = (0.015 + 0.24 * stage / 4) * (stage > 0.05 ? 1 : 0) * (1 + wob * 0.15);   // cheio bem visível: é a leitura do golpe
+  papo.visible = false;
+  return;
+  const { S, fwd, up } = mouthParts, k = stage / 4;
+  const look = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), fwd);
+  // ancorado na garganta (abaixo e atrás da linha da boca); cresce para frente e para baixo
+  papo.position.copy(S).addScaledVector(up, -0.16 - 0.06 * k).addScaledVector(fwd, -0.12 + 0.1 * k);
+  papo.quaternion.copy(look);
+  const r = 0.05 + 0.12 * k;   // menos inflado no mínimo e no máximo
+  papo.scale.set(r * (1.8 + wob * 0.12), r * (0.75 - wob * 0.1), r * (0.85 + wob * 0.06));   // largo e achatado
+  papo.visible = stage > 0.05;
+}
+
+// ---------------------------------------------------------------- cuspida de lama
+// Aviso: o papo enche (igual à língua; a finta enche só até o 3). Depois a boca abre em "O", o papo
+// esvazia de uma vez empurrando a lama: uma bola grande e respingos menores em arco, que estatelam no chão.
+const mudMat = comicShader(new THREE.MeshToonMaterial({ color: '#6b4423', gradientMap: ramp }));
+const splatMat = new THREE.MeshBasicMaterial({ color: '#4a2e17', transparent: true, depthWrite: false });
+const blobs = [], splats = [];
+let spitT = -1, mouthRound = 0;
+function spawnMud() {
+  const o = new THREE.Vector3(), q = new THREE.Quaternion();
+  mouthParts.cavity.getWorldPosition(o); bones.Head.getWorldQuaternion(q);
+  const fw = mouthParts.fwd.clone().applyQuaternion(q).setY(0).normalize();
+  o.addScaledVector(fw, 0.3);
+  for (let i = 0; i < 6; i++) {
+    const big = i === 0, r = big ? 0.13 : 0.035 + Math.random() * 0.04;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), mudMat); m.scale.setScalar(r); m.position.copy(o);
+    const side = new THREE.Vector3(fw.z, 0, -fw.x);
+    const v = fw.clone().multiplyScalar(big ? 7.5 : 5 + Math.random() * 3).addScaledVector(side, big ? 0 : (Math.random() - 0.5) * 2.4);
+    v.y = big ? 1.6 : 1 + Math.random() * 2.2;
+    scene.add(m); blobs.push({ m, v, r, spin: Math.random() * 10 });
+  }
+}
+function mudUpdate(dt) {
+  for (let i = blobs.length - 1; i >= 0; i--) {
+    const b = blobs[i]; b.v.y -= 9.8 * dt; b.m.position.addScaledVector(b.v, dt);
+    // estica na direção do voo (bolha de lama)
+    const sp = b.v.length(); b.m.scale.set(b.r, b.r, b.r * (1 + Math.min(0.8, sp * 0.06)));
+    b.m.lookAt(b.m.position.clone().add(b.v));
+    if (b.m.position.y < b.r * 0.5) {
+      scene.remove(b.m);
+      const s = new THREE.Mesh(new THREE.CircleGeometry(1, 20).rotateX(-Math.PI / 2), splatMat.clone());
+      s.position.set(b.m.position.x, 0.006 + splats.length * 0.0005, b.m.position.z); s.scale.setScalar(b.r * 2.6);
+      scene.add(s); splats.push({ s, t: 0 }); blobs.splice(i, 1);
+    }
+  }
+  for (let i = splats.length - 1; i >= 0; i--) {
+    const sp = splats[i]; sp.t += dt; sp.s.material.opacity = 1 - THREE.MathUtils.smoothstep(sp.t, 2.5, 4);
+    if (sp.t > 4) { scene.remove(sp.s); splats.splice(i, 1); }
+  }
+}
+function spitAnim(dt) {
+  if (spitT < 0) { mouthRound = 0; return 0; }
+  spitT += dt;
+  const warn = GAME.tell, k = spitT - warn;
+  if (spitT < warn) { papoTarget = 4; return 0; }
+  mouthRound = 1;
+  papoTarget = 0;
+  if (k >= GAME.spitAt && !spitAnim.done) { spawnMud(); spitAnim.done = true; }
+  let open = Math.min(1, k / GAME.spitAt) * 0.7;
+  if (k > GAME.spit * 0.7) open *= Math.max(0, 1 - (k - GAME.spit * 0.7) / (GAME.spit * 0.3));
+  if (k > GAME.spit) { spitT = -1; spitAnim.done = false; }
+  return open;
+}
+
+// ---------------------------------------------------------------- balanço (molas secundárias)
+// coroa: inclina atrasada em relação à cabeça; bermuda: a barra balança atrás do quadril;
+// papo: treme quando a cabeça mexe rápido ou quando leva soco
+const sway = { off: new THREE.Vector3(), vel: new THREE.Vector3(), last: null, crown: new THREE.Vector2(), crownV: new THREE.Vector2(), headLast: null, papoW: 0, papoWV: 0 };
+const shortsSway = { value: new THREE.Vector3() };
+function shortsShader(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev(sh, r);
+    sh.uniforms.uSway = shortsSway;
+    sh.vertexShader = 'uniform vec3 uSway;' + String.fromCharCode(10) + sh.vertexShader
+      .replace('#include <skinning_vertex>', `#include <skinning_vertex>
+        // a barra da bermuda (parte de baixo) fica para trás do movimento do quadril
+        float flap = smoothstep(0.95, 0.55, position.y);
+        transformed += uSway * flap;`);
+  };
+  mat.customProgramCacheKey = () => 'shorts';
+  mat.needsUpdate = true;
+}
+function swayUpdate(dt) {
+  if (dt <= 0) return;
+  const hp = bones.Hips.getWorldPosition(new THREE.Vector3());
+  if (!sway.last) sway.last = hp.clone();
+  const hv = hp.clone().sub(sway.last).divideScalar(dt); sway.last.copy(hp);
+  const hq = bones.Head.getWorldQuaternion(new THREE.Quaternion());
+  const he = new THREE.Euler().setFromQuaternion(hq);
+  if (!sway.headLast) sway.headLast = new THREE.Vector2(he.x, he.z);
+  const hw = new THREE.Vector2((he.x - sway.headLast.x) / dt, (he.z - sway.headLast.y) / dt); sway.headLast.set(he.x, he.z);
+  for (let i = 0; i < 6; i++) {
+    const h = dt / 6;
+    // bermuda: mola que puxa o deslocamento de volta a zero, empurrada pela velocidade do quadril
+    sway.vel.addScaledVector(sway.off, -220 * h).addScaledVector(sway.vel, -9 * h).addScaledVector(hv, -22 * h);
+    sway.off.addScaledVector(sway.vel, h);
+    // coroa
+    sway.crownV.x += (-sway.crown.x * 180 - sway.crownV.x * 8 - hw.x * 4) * h; sway.crown.x += sway.crownV.x * h;
+    sway.crownV.y += (-sway.crown.y * 180 - sway.crownV.y * 8 - hw.y * 4) * h; sway.crown.y += sway.crownV.y * h;
+    // papo
+    sway.papoWV += (-sway.papoW * 260 - sway.papoWV * 7 + (hw.length() + hv.length() * 3) * 0.6) * h; sway.papoW += sway.papoWV * h;
+  }
+  sway.off.clampLength(0, 0.06);
+  if (CHAR.sway) {
+    const tip = sockets.head_top.getWorldPosition(new THREE.Vector3());
+    if (!sway.tipLast) { sway.tipLast = tip.clone(); sway.hOff = new THREE.Vector3(); sway.hVel = new THREE.Vector3(); }
+    const tv = tip.clone().sub(sway.tipLast).divideScalar(dt); sway.tipLast.copy(tip);
+    for (let i = 0; i < 6; i++) { const h = dt / 6; sway.hVel.addScaledVector(sway.hOff, -160 * h).addScaledVector(sway.hVel, -6 * h).addScaledVector(tv, -18 * h); sway.hOff.addScaledVector(sway.hVel, h); }
+    sway.hOff.clampLength(0, 0.07);
+    swayU.hair.value.copy(sway.hOff).multiplyScalar(hatHair.on.value ? 0 : 1);   // de chapéu o cabelo fica preso   // de chapéu o cabelo mexe menos
+    swayU.coat.value.copy(sway.off).multiplyScalar(1.4 * (CHAR.coatSway ?? 1));
+    if (CHAR.coatSway != null) swayU.coat.value.z = Math.min(0, swayU.coat.value.z);   // só balança para trás/lados: nunca para dentro das pernas
+  }
+  shortsSway.value.copy(sway.off);
+  const swq = new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.clamp(sway.crown.x, -0.35, 0.35), 0, THREE.MathUtils.clamp(sway.crown.y, -0.35, 0.35)));
+  if (!crownFly && CHAR.wig) crown.quaternion.copy(crown.userData.homeQ || new THREE.Quaternion()).multiply(swq);   // Joana: balanço por cima da inclinação do chapéu
+  else if (!crownFly) { crown.rotation.x = THREE.MathUtils.clamp(sway.crown.x, -0.35, 0.35); crown.rotation.z = THREE.MathUtils.clamp(sway.crown.y, -0.35, 0.35); }   // demais (Jack, frog): como sempre foi
+  if (wig && CHAR.wig.tips) {   // mola das pontas: atrasa contra a velocidade da cabeça; vai para o espaço da peruca
+    const tip = sockets.head_top.getWorldPosition(new THREE.Vector3());
+    if (!sway.wLast) { sway.wLast = tip.clone(); sway.wOff = new THREE.Vector3(); sway.wVel = new THREE.Vector3(); }
+    const tv = tip.clone().sub(sway.wLast).divideScalar(dt); sway.wLast.copy(tip);
+    for (let i = 0; i < 6; i++) { const h = dt / 6; sway.wVel.addScaledVector(sway.wOff, -90 * h).addScaledVector(sway.wVel, -5 * h).addScaledVector(tv, -14 * h); sway.wOff.addScaledVector(sway.wVel, h); }
+    sway.wOff.clampLength(0, 0.12);
+    const q = wig.getWorldQuaternion(new THREE.Quaternion()).invert();
+    swayU.wig.value.copy(sway.wOff).applyQuaternion(q).divideScalar(wig.getWorldScale(new THREE.Vector3()).x);
+  } else if (wig) wig.quaternion.copy(wig.userData.homeQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.clamp(sway.crown.x * 1.6, -0.4, 0.4), 0, THREE.MathUtils.clamp(sway.crown.y * 1.6, -0.4, 0.4))));   // dreads balançam mais
+}
+
+// Tempos do jogo (engine-cpp a 60 quadros/s): socos jab 28, direto 32, gancho 38, corpo 34, uppercut 48 (engine.cpp);
+// aviso do King Frog antes do golpe especial = 38 quadros (finta com papo, ai.cpp); língua = 24 quadros com acerto
+// no 10º (skills.cpp/engine.cpp); cuspidela = 26 quadros com a lama saindo em 35% (9º quadro).
+const GAME = { tell: 38 / 60, tongue: 24 / 60, tongueHit: 10 / 60, spit: 26 / 60, spitAt: 0.35 * 26 / 60 };
+// postura de acúmulo (0..1) durante o aviso da língua e da lama, e um resto dela enquanto o golpe sai
+function tellPose() {
+  const ph = t => t < 0 ? 0 : t < GAME.tell ? THREE.MathUtils.smoothstep(t, 0, 0.18) : Math.max(0, 1 - (t - GAME.tell) / 0.25) * 0.6;
+  return Math.max(ph(tongueT), ph(spitT));
+}
+function releaseCharge() {
+  if (!charge) return;
+  const c = charge; charge = null;
+  move = c.move; moveT = 0; oneShot = true; moveScale = 1 + 0.5 * c.ratio;   // jogo: soco carregado dura até 50% a mais
+  mark('[data-move]', document.querySelector(`[data-move="${c.move}"]`));
+}
+let tail = null;
+function buildTail() {
+  const T = CHAR.tail; if (!T) return;
+  frog.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(new THREE.Vector3(0, T.y, -3), new THREE.Vector3(0, 0, 1), 0, 6);
+  const hit = ray.intersectObjects(bodyMeshes, false)[0];
+  const root = new THREE.Group(), H = bones.Hips;
+  const p = hit ? hit.point.clone().add(new THREE.Vector3(0, 0, 0.03)) : H.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, -0.05, -0.2));
+  H.add(root); root.position.copy(H.worldToLocal(p.clone()));
+  // aponta para trás (-Z do mundo) e um pouco para baixo
+  const want = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -0.45, -1).normalize());
+  root.quaternion.copy(H.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(want));
+  const mat = comicShader(new THREE.MeshToonMaterial({ color: T.color, gradientMap: ramp }));
+  const N = 12, step = T.len / N, joints = [];
+  let parent = root;
+  for (let i = 0; i < N; i++) {
+    const j = new THREE.Group(); j.position.z = i ? step : 0; parent.add(j); joints.push(j);
+    const r0 = T.r * (1 - 0.45 * i / N), r1 = T.r * (1 - 0.45 * (i + 1) / N);
+    j.add(new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, step, 10, 1, true).rotateX(Math.PI / 2).translate(0, 0, step / 2), mat));
+    j.add(new THREE.Mesh(new THREE.SphereGeometry(r0, 10, 8), mat));
+    parent = j;
+  }
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(T.r * 0.55, 10, 8), mat); tip.position.z = step; parent.add(tip);
+  tail = { joints, wag: 0, wagV: 0 };
+}
+function tailUpdate(dt, t) {
+  if (!tail) return;
+  // mola lateral empurrada pelo quadril + abanada lenta; curva em "?" (sobe e enrola na ponta)
+  const push = sway.off ? sway.off.x * 40 : 0;
+  for (let i = 0; i < 6; i++) { const h = dt / 6; tail.wagV += (-tail.wag * 60 - tail.wagV * 5 - push) * h; tail.wag += tail.wagV * h; }
+  const n = tail.joints.length;
+  tail.joints.forEach((j, i) => {
+    const u = i / (n - 1);
+    j.rotation.x = i ? (0.1 + 0.3 * u * u) * (j.userData.up ?? 1) : 0;   // curva para cima, mais forte na ponta
+    j.rotation.y = i ? 0.16 * u + (0.06 * Math.sin(t * 2.2 - i * 0.5) + tail.wag * 0.05) * (0.4 + u) : 0;   // vira para um lado e enrola
+  });
+}
+const GLOVE_SINK = CHAR.gloveSink != null ? CHAR.gloveSink : -0.1 * SC;
+const CROWN_SCALE = CHAR.hatScale || 1;   // coroa grande como na folha (o modelo base é do tamanho de um chapéu)
+let danceMixer = null, danceOn = false, danceW = 0;
+let skirt = null, umbrellas = null; const umbOpen = { L: 1, R: 1 }, umbVel = { L: 0, R: 0 };
+const skirtOff = { value: new THREE.Vector3() }, skirtLeg = { a: { value: [new THREE.Vector3(), new THREE.Vector3()] }, b: { value: [new THREE.Vector3(), new THREE.Vector3()] }, r: { value: 0.11 } }; let skirtMesh = null;
+let eyesDecal = null, wig = null, crabEyeMesh = null, clawT = 0, clawA = 0, clawV = 0;
+let nose, belt = null, beltSrc = null, beltY = null, beltV = 0;
+const _bm = new THREE.Matrix4(), _bp = new THREE.Vector3(), _bq = new THREE.Quaternion(), _bs = new THREE.Vector3(), _bqs = new THREE.Quaternion();
+let frog, bones = {}, sockets = {}, eyeL, eyeR, mouth, papo, crown, gloves = {}, face = 'normal';
+const loader = new GLTFLoader();
+const load = f => new Promise((ok, bad) => loader.load(ASSETS + f + '?t=' + Date.now(), ok, undefined, bad));
+
+try {
+  const noGlove = () => Promise.resolve({ scene: new THREE.Group() });   // sem luva: o alvo da mão continua existindo (o IK leva o braço até ele)
+  const [body, gL, gR, cr] = await Promise.all([load(CHAR.body), CHAR.gloves ? load(CHAR.gloves[0]) : noGlove(), CHAR.gloves ? load(CHAR.gloves[1]) : noGlove(), CHAR.hat ? load(CHAR.hat) : Promise.resolve({ scene: new THREE.Group() })]);
+  frog = body.scene;
+  scene.add(frog);
+  frog.traverse(o => { if (o.isBone) bones[o.name] = o; if (/^(head_top|head_face|hand_[LR]_grip|spine_back|hips_front)$/.test(o.name)) sockets[o.name] = o; });
+  toonify(frog);
+  // barriga clara: uma forma lisa (elipse no espaço do corpo em repouso) pintada no shader, do papo até o
+  // cinturão — a borda sai limpa, sem os retalhos de polígono da textura
+  if (CHAR.hair) {
+    Object.assign(hatHair, { brimY: { value: CHAR.hair.brimY }, r: { value: CHAR.hair.crownR }, h: { value: CHAR.hair.crownH }, slope: { value: Math.tan(THREE.MathUtils.degToRad(CHAR.hatTilt || 0)) } });
+    hatHair.on.value = 1;
+    frog.traverse(o => { if (o.isSkinnedMesh) hairUnderHat(o.material); });
+  }
+  if (CHAR.sway) frog.traverse(o => { if (o.isSkinnedMesh && o.geometry.attributes._sway_hair) swayShader(o.material); });
+  if (CHAR.frogStuff) frog.traverse(o => { if (o.isSkinnedMesh && !/belt/.test(o.name) && !/bermuda_(green|side|hem)/.test(o.material.name || '')) bellyShader(o.material); });
+  frog.traverse(o => { if (o.isSkinnedMesh && /bermuda_(green|side|hem)/.test(o.material.name || '')) shortsShader(o.material); });
+  // cinturão: sai do skinning (que puxava ele junto com as coxas) e vira peça rígida que segue o quadril
+  // com uma mola: sobe e desce macio, sem deformar
+  frog.updateMatrixWorld(true);
+  frog.traverse(o => { if (o.isSkinnedMesh && /belt/.test(o.name)) beltSrc = o; });
+  if (beltSrc) {
+    const g = beltSrc.geometry.clone(); g.deleteAttribute('skinIndex'); g.deleteAttribute('skinWeight');
+    belt = new THREE.Mesh(g, beltSrc.material); scene.add(belt);
+    beltSrc.visible = false;
+    belt.userData.rest = new THREE.Matrix4().copy(bones.Hips.matrixWorld).invert().multiply(beltSrc.matrixWorld);
+    // folga: o cinturão fica 6% mais largo que a cintura (o corpo dobra por baixo dele sem furar)
+    g.computeBoundingBox(); const c = g.boundingBox.getCenter(new THREE.Vector3());
+    g.translate(-c.x, 0, -c.z); g.scale(1.06, 1, 1.06); g.translate(c.x, 0, c.z);
+    belt.matrixAutoUpdate = false;
+  }
+  // coroa no topo da cabeça
+  crown = cr.scene; toonify(crown); sockets.head_top.add(crown); crown.position.set(0, CHAR.hatDrop || 0, 0); crown.scale.setScalar(CROWN_SCALE);
+  if (CHAR.hatWorldY) {   // assenta a aba na altura pedida (o eixo do osso da cabeça não é o vertical do mundo)
+    frog.updateMatrixWorld(true);
+    const wp = sockets.head_top.getWorldPosition(new THREE.Vector3()); wp.y = CHAR.hatWorldY;
+    crown.position.copy(sockets.head_top.worldToLocal(wp));
+  }
+  if (CHAR.hatTilt) {   // aba sobe na frente (mostra o rosto) e desce atrás (cobre a nuca)
+    const pq = sockets.head_top.getWorldQuaternion(new THREE.Quaternion());
+    const want = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(CHAR.hatTilt)).multiply(pq.clone().multiply(crown.quaternion));
+    crown.quaternion.copy(pq.invert().multiply(want));
+  }
+  crown.userData.homeQ = crown.quaternion.clone();
+  crown.userData.home = crown.position.clone();
+  if (CHAR.dance) {   // animação de dança (Mixamo passada para o esqueleto dela: retarget_mixamo.py)
+    const da = await load(CHAR.dance);
+    danceMixer = window.DANCE = new THREE.AnimationMixer(frog); danceMixer.clipAction(da.animations.find(c => c.name === 'samba') || da.animations[da.animations.length - 1]).play();
+    const b = $('#dance'); b.style.display = '';
+    b.addEventListener('click', () => { danceOn = !danceOn; b.classList.toggle('on', danceOn); if (danceOn) danceMixer.setTime(0); });
+  }
+  if (CHAR.umbrella) {   // um guarda-chuva em cada mão
+    umbrellas = {}; for (const k of ['L', 'R']) { const u = makeUmbrella(); toonify(u); u.traverse(o => { if (o.isMesh) o.material.side = THREE.DoubleSide; }); u.scale.setScalar(CHAR.umbrella.scale || 1); scene.add(u); umbrellas[k] = u; }
+  }
+  if (CHAR.skirt) {   // saia em código (make_valeria_skirt.py, no espaço do corpo): presa no quadril, barra balança com mola
+    const sk = await load(CHAR.skirt.file); toonify(sk.scene);
+    sk.scene.traverse(o => { if (!o.isMesh) return; o.material.side = THREE.DoubleSide;
+      const prev = o.material.onBeforeCompile;
+      skirtMesh = skirtMesh || o;
+      o.material.onBeforeCompile = (sh, r) => { prev(sh, r); Object.assign(sh.uniforms, { uSkOff: skirtOff, uLegA: skirtLeg.a, uLegB: skirtLeg.b, uLegR: skirtLeg.r });
+        sh.vertexShader = 'uniform vec3 uSkOff; uniform vec3 uLegA[2]; uniform vec3 uLegB[2]; uniform float uLegR; attribute float _sway_hair;' + String.fromCharCode(10) + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+          transformed += uSkOff * _sway_hair;
+          for (int i = 0; i < 2; i++) {   // coxa (quadril -> joelho) como cápsula: o pano que entrar nela sai para fora
+            vec3 ab = uLegB[i] - uLegA[i];
+            float h = clamp(dot(transformed - uLegA[i], ab) / dot(ab, ab), 0.0, 1.0);
+            vec3 c = uLegA[i] + ab * h, d = transformed - c;
+            float L = length(d);
+            float R2 = uLegR * 1.5;   // cede aos poucos de 1,5R até R (sem vinco onde o empurrão começa)
+            if (L < R2) transformed = c + (L > 1e-4 ? d / L : normalize(vec3(d.x, 0.0, d.z) + vec3(0.0, 0.0, 1e-3))) * mix(uLegR, R2, L / R2);
+          }`); };
+      o.material.customProgramCacheKey = () => 'skirt'; o.material.needsUpdate = true; });
+    frog.updateMatrixWorld(true); scene.add(sk.scene); bones.Hips.attach(sk.scene); skirt = sk.scene;
+  }
+  if (CHAR.wig) {   // peruca vestida no Blender (vestir_peruca.py, já no espaço do corpo): presa na cabeça, não voa, balança com mola
+    const wg = await load(CHAR.wig.file); toonify(wg.scene);
+    frog.updateMatrixWorld(true);
+    const pivotW = sockets.head_top.getWorldPosition(new THREE.Vector3());
+    wig = new THREE.Group(); wig.position.copy(pivotW); scene.add(wig);   // pivô do balanço no topo da cabeça
+    wg.scene.position.copy(pivotW).negate(); wig.add(wg.scene);
+    wig.updateMatrixWorld(true); bones.Head.attach(wig);
+    wig.userData.homeQ = wig.quaternion.clone();
+    if (CHAR.wig.double) wg.scene.traverse(o => { if (o.isMesh) o.material.side = THREE.DoubleSide; });   // pétalas: pano fino, vistas dos dois lados
+    if (CHAR.wig.tips) wg.scene.traverse(o => { if (o.isMesh && o.geometry.attributes._sway_hair) wigTipShader(o.material); });
+    if (CHAR.wig.lava) wg.scene.traverse(o => { if (!o.isMesh || o.userData.hull) return;
+      o.geometry.computeBoundingBox(); lavaShader(o.material, o.geometry.boundingBox);
+      // casco invertido: contorno grosso do sprite em volta do cabelo (inclusive na linha da testa, onde o contorno de tela não vê borda)
+      const hm = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
+      hm.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + String.fromCharCode(10) + 'transformed += normal * 0.008;'); };
+      if (o.geometry.attributes._sway_hair) wigTipShader(hm);
+      hm.customProgramCacheKey = () => 'lavahull';
+      const hull = new THREE.Mesh(o.geometry, hm); hull.userData.hull = true; o.add(hull); });
+    if (CHAR.wig.hat) {   // de chapéu, os dreads que passam da aba entram na copa (não atravessam o chapéu)
+      const H = CHAR.wig.hat;
+      Object.assign(hatHair, { brimY: { value: H.brimY }, r: { value: H.crownR }, h: { value: H.crownH }, slope: { value: H.slope || 0 }, cz: { value: H.cz || 0 } });
+      hatHair.on.value = 1;
+      wg.scene.traverse(o => { if (o.isMesh) hairUnderHat(o.material); });
+    }
+  }
+  // luvas: seguem a mão; o IK leva o braço até elas
+  for (const [k, g] of [['L', gL], ['R', gR]]) { toonify(g.scene); g.scene.traverse(o => { if (o.isMesh) o.material.side = THREE.DoubleSide; });   /* a malha da luva tem furinhos: dupla face não deixa ver o ringue através */ g.scene.scale.set(CHAR.gloveScale, CHAR.gloveScale, CHAR.gloveFlipZ ? -CHAR.gloveScale : CHAR.gloveScale);   /* gloveFlipZ: espelha a peça no Z dela */ gloves[k] = g.scene; scene.add(g.scene); }
+  // rosto 2.5D preso no osso da cabeça (planos com remendo de pele por baixo do olho pintado)
+  const fp = new THREE.Group(); bones.Head.add(fp); fp.userData.base = true; window.facePivot = fp;
+  eyeL = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), planeMat(faceTex.normal.eye));
+  eyeR = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), planeMat(faceTex.normal.eye)); eyeR.scale.x = -1;
+  mouth = new THREE.Mesh(new THREE.BufferGeometry(), planeMat(faceTex.normal.mouth));
+  nose = new THREE.Mesh(new THREE.BufferGeometry(), planeMat(noseTex));
+  fp.add(eyeL, eyeR, mouth, nose);
+  frog.traverse(o => { if (o.isSkinnedMesh && !/belt/.test(o.name)) bodyMeshes.push(o); });
+  buildTail();
+  frog.updateMatrixWorld(true);
+  headRest = bones.Head.matrixWorld.clone();
+  const headCut = sockets.head_face.getWorldPosition(new THREE.Vector3()).y - 0.5 * SC;
+  for (const m of bodyMeshes) {
+    const src = m.geometry, pos = src.attributes.position, idx = src.index, out = [], v = new THREE.Vector3();
+    const tri = [0, 0, 0].map(() => new THREE.Vector3());
+    for (let t = 0; t < idx.count; t += 3) {
+      for (let k = 0; k < 3; k++) tri[k].fromBufferAttribute(pos, idx.getX(t + k)).applyMatrix4(m.matrixWorld);
+      if ((tri[0].y + tri[1].y + tri[2].y) / 3 < headCut) continue;   // só cabeça e ombros
+      for (const p of tri) out.push(p.x, p.y, p.z);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+    rayHead.push(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })));
+  }
+  buildMouthInterior(fp);
+  // papo: bolsa no queixo, enche em 4 estágios
+  papo = buildPapo();
+  bones.Head.add(papo);
+  $('#titulo').textContent = CHAR.name + ' · 3D';
+  if (CHAR.noEyes) eyeL.visible = eyeR.visible = false;   // olho esculpido (sob a casca) + tapa-olho
+  if (CHAR.nostrils === false) nose.visible = false;   // humano: o nariz já é esculpido
+  if (CHAR.eyeStyle === 'sprite') {
+    const img = new Image(); await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = CHAR.atlas; });   // onload: decode() trava em aba de fundo
+    const half = (b, side) => [b[0] + (side ? b[2] / 2 : 0), b[1], b[2] / 2, b[3]];
+    for (const [f, [e, m]] of Object.entries(SPR_FACES)) faceTex[f] = { eye: spriteCanvas(img, e, E_BOX), eyeA: spriteCanvas(img, e, half(E_BOX, 0)), eyeB: spriteCanvas(img, e, half(E_BOX, 1)), mouth: spriteCanvas(img, m, M_BOX) };
+    eyesDecal = [new THREE.Mesh(new THREE.BufferGeometry(), planeMat(faceTex.normal.eyeA)), new THREE.Mesh(new THREE.BufferGeometry(), planeMat(faceTex.normal.eyeB))];
+    window.facePivot.add(...eyesDecal); eyeL.visible = eyeR.visible = false;
+    mouth.material.map = faceTex.normal.mouth;
+    if (FS.nBox) { nose.material.map = spriteCanvas(img, 'nostrils', FS.nBox); nose.visible = true; }
+  }
+  const CF = CODE_FACE[CHAR.eyeStyle];
+  if (CF) {
+    for (const f of ['normal', 'angry', 'pain', 'ko', 'grit', 'squint'])
+      faceTex[f] = { eye: faceTex.normal.eye, eyeA: texOf(128, 128, g => CF.eye(g, -1, f)), eyeB: texOf(128, 128, g => CF.eye(g, 1, f)), mouth: texOf(256, 90, g => CF.mouth(g, f)) };
+    eyesDecal = [new THREE.Mesh(new THREE.BufferGeometry(), planeMat(faceTex.normal.eyeA)), new THREE.Mesh(new THREE.BufferGeometry(), planeMat(faceTex.normal.eyeB))];
+    window.facePivot.add(...eyesDecal); eyeL.visible = eyeR.visible = false;
+    mouth.material.map = faceTex.normal.mouth;
+    nose.material.map = texOf(128, 128, CF.nose); nose.visible = true;
+  }
+  if (!CHAR.frogStuff) for (const id of ['tell', 'feint', 'spit', 'tongue']) { const b = $('#' + id); if (b) b.style.display = 'none'; }
+  window.DBG = { THREE, scene, frog, bones, sockets, gloves, crown, eyeL, mouth, papo, camera, controls, mouthParts, renderer, rt, postScene, postCam, papoSkin, belly, swayU };
+  status(`Pronto · ossos: ${Object.keys(bones).length} · soquetes: ${Object.keys(sockets).join(', ')}`);
+} catch (e) { status('Erro ao carregar: ' + e.message); throw e; }
+
+// posição do rosto e do papo no espaço do osso da cabeça (ajustável nos controles)
+const headWorldUp = () => { const q = new THREE.Quaternion(); bones.Head.getWorldQuaternion(q); return q; };
+let faceRest = null; // orientação da cabeça na pose de descanso: os planos ficam presos nela e giram junto com a cabeça
+function placeFace() {
+  const s = +$('#eyeS').value, x = +$('#eyeX').value, y = +$('#eyeY').value, z = +$('#eyeZ').value, my = +$('#mouthY').value;
+  const head = bones.Head;
+  if (!faceRest) {
+    const q0 = head.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const anchor = head.worldToLocal(sockets.head_face.getWorldPosition(new THREE.Vector3()));
+    faceRest = { q0, anchor };
+  }
+  const local = (dx, dy, dz) => new THREE.Vector3(dx, dy, dz).applyQuaternion(faceRest.q0).add(faceRest.anchor);
+  for (const [m, dx] of [[eyeL, x], [eyeR, -x]]) { m.position.copy(local(dx, y, z)); m.quaternion.copy(faceRest.q0); m.scale.set(dx > 0 ? -s : s, s, 1); /* o olho da direita da tela é o espelho do da esquerda */ }
+  const lift = +$('#mouthLift').value, ny = +$('#noseY').value, key = [my, s, lift, y, z, ny, x].join();
+  if (key !== mouthKey) {
+    if (eyesDecal) {   // cada olho é uma metade do sprite: "Olhos ↔" afasta sem esticar
+      const off = CODE_FACE[CHAR.eyeStyle] ? x : (s / 2) * (x / CHAR.face.eyeX);   // Valéria: cada olho é um desenho centrado em ±eyeX
+      eyesDecal.forEach((m, i) => { m.geometry.dispose(); m.geometry = decal(local(i ? off : -off, y, 0), s, s, 12, 10, lift).g; });
+    }
+    mouthKey = key; layoutMouth(local(0, my, 0), s * CHAR.mouthW, lift);
+    nose.geometry.dispose();
+    if (FS && FS.nBox) { const k = 2 * s / FS.eBox[2]; nose.geometry = decal(local(0, ny, 0), FS.nBox[2] * k, FS.nBox[3] * k, 12, 6, lift).g; }   // narinas do jogo no focinho
+    else if (CODE_FACE[CHAR.eyeStyle]) nose.geometry = decal(local(0, ny, 0), s * 0.8, s * 0.8, 8, 8, lift).g;   // nariz desenhado
+    else nose.geometry = decal(local(0, my + 0.13, 0), s * 0.75, s * 0.75, 8, 8, lift).g;   // narinas no focinho, acima da boca
+  }
+}
+for (const [k, v] of Object.entries(CHAR.face)) { const el = $('#' + k); if (el) el.value = v; }
+for (const id of ['noseY', 'crease', 'eyeX', 'eyeY', 'eyeZ', 'eyeS', 'mouthY', 'mouthLift', 'mouthOpen', 'outline', 'hitstop', 'animFps', 'cell']) { const el = $('#' + id); const span = el.nextElementSibling; const upd = () => { span.textContent = (+el.value).toFixed(3); if (id === 'cell') comic.cell.value = +el.value; if (id === 'crease') creaseU.value = +el.value;
+    if (id === 'outline') { lineWidth.value = +el.value; outlineUniform.value = +el.value * 0.0065; } }; el.addEventListener('input', upd); upd(); }
+
+// ---------------------------------------------------------------- golpes com mecânica de boxe
+// Cada golpe é uma sequência de poses-chave interpoladas por curva cúbica (Catmull-Rom), sem paradas
+// robóticas entre as poses. Canais: luva (deslocamento a partir da guarda, no referencial do lado que soca:
+// x = para fora, y = para cima, z = para frente), giro do quadril, giro do tronco, inclinação, agachamento,
+// e a outra luva (que fecha a guarda no queixo). Tempos totais iguais aos do motor do jogo.
+const MOVES = {
+  jab:   { dur: 0.47, side: 'L', keys: [
+    [0.00, [0, 0, 0], 0, 0, 0, 0],
+    [0.18, [0.02, -0.03, -0.07], -4, -3, -2, 0.02],          // carrega: recolhe um pouco, peso no pé de trás
+    [0.40, [-0.12, 0.09, 0.82], 14, 10, 6, 0.01],           // estica: quadril e ombro entram juntos
+    [0.52, [-0.13, 0.10, 0.86], 15, 11, 7, 0.01],           // impacto
+    [0.80, [-0.02, 0.02, 0.18], 4, 3, 2, 0.01],             // volta rápida pela mesma linha
+    [1.00, [0, 0, 0], 0, 0, 0, 0]] },
+  cross: { dur: 0.53, side: 'R', keys: [
+    [0.00, [0, 0, 0], 0, 0, 0, 0],
+    [0.22, [0.04, -0.04, -0.10], -10, -6, -3, 0.04],
+    [0.46, [-0.30, 0.10, 0.98], 38, 22, 11, 0.05],          // giro completo do quadril, peso para a frente
+    [0.58, [-0.32, 0.11, 1.00], 40, 23, 12, 0.05],
+    [0.84, [-0.06, 0.03, 0.22], 8, 5, 3, 0.02],
+    [1.00, [0, 0, 0], 0, 0, 0, 0]] },
+  hook:  { dur: 0.63, side: 'L', keys: [
+    [0.00, [0, 0, 0], 0, 0, 0, 0],
+    [0.24, [0.20, -0.03, -0.06], -14, -10, -2, 0.06],       // abre o cotovelo e gira para o lado de trás
+    [0.40, [0.12, 0.10, 0.42], 8, 6, 3, 0.07],               // começa o arco
+    [0.52, [-0.40, 0.12, 0.62], 34, 26, 5, 0.07],            // cruza na frente: o quadril puxa o braço
+    [0.62, [-0.52, 0.11, 0.48], 38, 30, 5, 0.06],            // termina o arco (acompanhamento)
+    [0.86, [-0.08, 0.03, 0.10], 6, 5, 1, 0.02],
+    [1.00, [0, 0, 0], 0, 0, 0, 0]] },
+  upper: { dur: 0.80, side: 'R', keys: [
+    [0.00, [0, 0, 0], 0, 0, 0, 0],
+    [0.28, [-0.04, -0.40, -0.06], -14, -8, 6, 0.14],         // afunda nos joelhos, luva desce ao lado do quadril
+    [0.48, [-0.16, -0.05, 0.02], 22, 14, -2, 0.06],          // sobe com as pernas, punho virando para ele
+    [0.60, [-0.28, 0.30, 0.04], 30, 18, -9, -0.02],          // encaixa: antebraço em pé na frente do queixo, dedos para ele
+    [0.70, [-0.27, 0.32, 0.02], 30, 18, -9, -0.02],
+    [0.90, [-0.03, 0.10, 0.08], 6, 4, -1, 0.01],
+    [1.00, [0, 0, 0], 0, 0, 0, 0]] },
+  body:  { dur: 0.57, side: 'R', keys: [
+    [0.00, [0, 0, 0], 0, 0, 0, 0],
+    [0.22, [0.04, -0.12, -0.06], -10, -6, 2, 0.10],          // abaixa o nível antes de soltar
+    [0.46, [-0.18, -0.46, 0.72], 30, 20, 14, 0.16],          // soco no corpo, tronco inclinado
+    [0.58, [-0.19, -0.47, 0.74], 31, 21, 15, 0.16],
+    [0.84, [-0.04, -0.10, 0.16], 6, 4, 3, 0.04],
+    [1.00, [0, 0, 0], 0, 0, 0, 0]] },
+};
+// Ritmo do soco (tempo real -> tempo das chaves): prepara, dispara acelerando até o impacto (velocidade máxima no
+// contato), segura um instante no impacto e volta devagar no começo e acelerando até a guarda (easy in).
+function punchTime(keys, p) {
+  if (!keys._imp) {
+    let iImp = 1, best = -1;
+    keys.forEach((k, i) => { const m = Math.hypot(...k[1]); if (m > best + 1e-6) { best = m; iImp = i; } });
+    keys._imp = { tA: keys[Math.max(0, iImp - 2)][0], tI: keys[iImp][0] };
+  }
+  const { tA, tI } = keys._imp;
+  const a = Math.min(0.5, tA * 1.15), sI = (tI - tA) * 0.55, hold = 0.06, c = Math.min(0.92, a + sI + hold);
+  if (p < a) return tA * (p / a);
+  if (p < a + sI) { const u = (p - a) / sI; return tA + (tI - tA) * u * u; }
+  if (p < c) return tI;
+  const u = (p - c) / (1 - c);
+  return tI + (1 - tI) * u * u;
+}
+// interpolação cúbica de Hermite com tangentes de Catmull-Rom (passa pelas chaves sem parar nelas)
+function sampleKeys(keys, t) {
+  let i = 0; while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
+  const k0 = keys[Math.max(0, i - 1)], k1 = keys[i], k2 = keys[i + 1], k3 = keys[Math.min(keys.length - 1, i + 2)];
+  const h = k2[0] - k1[0], u = h > 0 ? Math.min(1, Math.max(0, (t - k1[0]) / h)) : 0;
+  const h00 = 2 * u ** 3 - 3 * u ** 2 + 1, h10 = u ** 3 - 2 * u ** 2 + u, h01 = -2 * u ** 3 + 3 * u ** 2, h11 = u ** 3 - u ** 2;
+  const tan = (a, b, c, ta, tc) => (tc - ta) > 0 ? (c - a) / (tc - ta) * h : 0;
+  const ch = (a, b, c, d) => h00 * b + h10 * tan(a, b, c, k0[0], k2[0]) + h01 * c + h11 * tan(b, c, d, k1[0], k3[0]);
+  const v = j => ch(k0[1][j], k1[1][j], k2[1][j], k3[1][j]);
+  const s = j => ch(k0[j], k1[j], k2[j], k3[j]);
+  return { glove: new THREE.Vector3(v(0), v(1), v(2)), hip: s(2), spine: s(3), lean: s(4), drop: s(5) };
+}
+
+// pose do corpo aplicada em eixos de MUNDO (não depende do eixo local de cada osso do Meshy)
+const rest = new Map();
+const UP = new THREE.Vector3(0, 1, 0), RIGHT = new THREE.Vector3(1, 0, 0), FWD = new THREE.Vector3(0, 0, 1);
+function rotWorld(bone, axis, deg) {
+  if (!deg) return;
+  const pq = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+  const qw = new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(deg));
+  bone.quaternion.premultiply(pq.clone().invert().multiply(qw).multiply(pq));
+  bone.updateMatrixWorld(true);
+}
+function resetPose() {
+  if (!rest.size) for (const b of Object.values(bones)) rest.set(b, { q: b.quaternion.clone(), p: b.position.clone(), s: b.scale.clone() });
+  for (const [b, r] of rest) if (!/Arm|ForeArm|Hand/.test(b.name)) { b.quaternion.copy(r.q); b.position.copy(r.p); }
+  frog.updateMatrixWorld(true);
+}
+let charge = null, moveScale = 1, oneShot = false;
+let move = null, moveT = 0, loopMove = true, hitstop = 0, hit = null, hitT = 0, papoTarget = 0, papoNow = 0, papoVel = 0, crownFly = null;
+const bump = x => Math.sin(Math.max(0, Math.min(1, x)) * Math.PI);
+function bodyPose(t, dt) {
+  resetPose();
+  // ginga de boxeador: quica nos joelhos e balança o tronco devagar
+  let hip = 3 * Math.sin(t * 1.3), spine = 2 * Math.sin(t * 1.3 + 0.6), lean = 4 + 1.5 * Math.sin(t * 2.6), drop = 0.035 + 0.018 * Math.sin(t * 5.2), roll = 0;
+  let glove = null, side = null, p = 0;
+  if (move) {
+    const m = MOVES[move]; p = Math.min(1, moveT / (m.dur * moveScale)); const k = sampleKeys(m.keys, punchTime(m.keys, p));
+    const sg = m.side === 'L' ? -1 : 1;       // soco de esquerda gira o corpo no sentido oposto ao de direita
+    hip += sg * k.hip; spine += sg * k.spine; lean += k.lean; drop += k.drop; glove = k.glove; side = m.side;
+  }
+  if (charge) {
+    // carregando: gira o corpo para longe do braço que vai socar e afunda um pouco
+    const r = charge.ratio, sg = MOVES[charge.move].side === 'L' ? -1 : 1;
+    hip -= sg * (5 + 11 * r); spine -= sg * (4 + 8 * r); drop += 0.025 * r; lean += 2 * r;
+  }
+  const tl = tellPose();
+  if (tl) { lean -= 14 * tl; drop += 0.035 * tl; }   // tronco bem para trás   // aviso da língua/lama: acumula, peito estufa, corpo vai para trás
+  if (hit) { const k = bump(hitT / (hit === 'ko' ? 0.9 : 0.45)); lean -= (hit === 'light' ? 9 : 20) * k; roll = (hit === 'light' ? 8 : 18) * k; hip += 6 * k; }
+  // quadril: desce (joelhos), gira e inclina; as coxas giram ao contrário para os pés não escorregarem
+  const H = bones.Hips, base = rest.get(H).p.clone();
+  const down = H.parent.worldToLocal(H.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, -drop, 0)));
+  H.position.copy(down); H.updateMatrixWorld(true);
+  rotWorld(H, UP, hip * 0.6); rotWorld(H, RIGHT, lean * 0.25);
+  for (const leg of ['LeftUpLeg', 'RightUpLeg']) { rotWorld(bones[leg], UP, -hip * 0.6); rotWorld(bones[leg], RIGHT, -lean * 0.25 - drop * 60); }
+  for (const knee of ['LeftLeg', 'RightLeg']) rotWorld(bones[knee], RIGHT, drop * 120);
+  for (const foot of ['LeftFoot', 'RightFoot']) rotWorld(bones[foot], RIGHT, -drop * 60);
+  // tronco: o giro restante se distribui pela coluna (o ombro de quem soca vai para a frente)
+  for (const sp of ['Spine', 'Spine01', 'Spine02']) { rotWorld(bones[sp], UP, spine / 3); rotWorld(bones[sp], RIGHT, lean * 0.25); }
+  // cabeça compensa para continuar olhando o adversário e sai da linha no golpe levado
+  rotWorld(bones.Head, UP, -(hip * 0.6 + spine) * 0.6); rotWorld(bones.Head, FWD, roll);
+  if (tongueBody.yaw) {
+    // chicotada: tronco e cabeça acompanham a língua (a cabeça vai mais que o tronco)
+    for (const sp of ['Spine01', 'Spine02']) rotWorld(bones[sp], UP, tongueBody.yaw * 0.2);
+    rotWorld(bones.Head, UP, tongueBody.yaw * 0.6); rotWorld(bones.Head, FWD, tongueBody.roll);
+  }
+  return { glove, side, p, yaw: hip * 0.6 + spine };
+}
+
+// ---------------------------------------------------------------- passada lateral de boxeador (no lugar)
+// Ele não sai do centro: levanta o pé do lado do passo bem alto, desce batendo e inclina o corpo; o pé de trás
+// dá um toque curto. Quem anda é o ringue, que gira em volta dele e dá a impressão do deslocamento.
+// jogo: esquiva = 22 quadros, o ringue gira 90° (ai.cpp, FIGHTER_DODGE_L/R)
+const STEP = { dur: 22 / 60, turn: THREE.MathUtils.degToRad(90) };
+let feet = null, stepS = null, stepLoop = false, stepDir = 1;
+function initFeet() {
+  frog.updateMatrixWorld(true);   // pose de repouso com as matrizes em dia (senão os pés ficam no lugar errado e a perna agacha demais)
+  feet = {};
+  for (const k of ['Left', 'Right']) feet[k] = bones[k + 'Foot'].getWorldPosition(new THREE.Vector3());
+  feet.q = { Left: bones.LeftFoot.getWorldQuaternion(new THREE.Quaternion()), Right: bones.RightFoot.getWorldQuaternion(new THREE.Quaternion()) };
+  feet.home = { Left: feet.Left.clone(), Right: feet.Right.clone() };
+}
+function startStep(dir) {
+  if (stepS) return;
+  stepS = { dir, t: 0, rot0: stage.rotation.y, lead: dir > 0 ? 'Left' : 'Right', trail: dir > 0 ? 'Right' : 'Left' };
+}
+const ease = x => x * x * (3 - 2 * x);
+const arc = x => Math.sin(Math.PI * Math.min(1, Math.max(0, x)));
+function stepUpdate(dt) {
+  if (!stepS) { if (stepLoop) { startStep(stepDir); stepDir = -stepDir; } return { lean: 0, drop: 0 }; }
+  stepS.t += dt;
+  const p = Math.min(1, stepS.t / STEP.dur), sx = stepS.dir;
+  // pé da frente: sobe alto e um pouco para fora, desce no mesmo lugar (0 -> 0.6)
+  const a = Math.min(1, p / 0.6);
+  feet[stepS.lead].copy(feet.home[stepS.lead]).add(new THREE.Vector3(sx * 0.05 * arc(a), 0.18 * arc(a) * (1 - 0.25 * a), 0.02 * arc(a)));
+  // pé de trás: toque curto quando o da frente aterrissa (0.5 -> 0.9)
+  const b = (p - 0.5) / 0.4;
+  feet[stepS.trail].copy(feet.home[stepS.trail]).add(new THREE.Vector3(sx * 0.03 * arc(b), 0.08 * arc(b), 0));
+  // o ringue gira ao contrário do passo: parece que ele andou de lado
+  stage.rotation.y = stepS.rot0 - sx * STEP.turn * ease(Math.min(1, Math.max(0, (p - 0.15) / 0.7)));
+  // corpo: inclina para longe do pé levantado (equilíbrio) e afunda no impacto da descida
+  const lean = -sx * 2.5 * arc(a) + sx * 1.5 * arc((p - 0.55) / 0.45);   // inclinação discreta
+  const drop = 0.025 * arc((p - 0.5) / 0.35);
+  if (p >= 1) { stepS = null; feet.Left.copy(feet.home.Left); feet.Right.copy(feet.home.Right); }
+  return { lean, drop };
+}
+function legsIK() {
+  for (const k of ['Left', 'Right']) {
+    const hip = bones[k + 'UpLeg'].getWorldPosition(new THREE.Vector3());
+    const pole = hip.clone().add(new THREE.Vector3(k === 'Left' ? 0.25 : -0.25, -0.5, 1.0));   // joelho para a frente e para fora
+    pole.add(dodgeKnee);
+    solveIK(bones[k + 'UpLeg'], bones[k + 'Leg'], bones[k + 'Foot'], feet[k], pole);
+    // pé fica na orientação de repouso (reto no chão): sem isso ele herda o giro da canela e o tornozelo
+    // torce, afinando a canela quando o pé sobe
+    const F = bones[k + 'Foot'], pq = F.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    F.quaternion.copy(pq.multiply(feet.q[k])); F.updateMatrixWorld(true);
+  }
+}
+
+// ---------------------------------------------------------------- esquiva
+// Duas famílias, em 3 direções (esquerda, direita, trás):
+//  inclina = os pés ficam plantados, só o tronco e a cabeça saem da linha do golpe (slip);
+//  salta   = sai do chão: pequeno pulo para o lado ou para trás e volta para o centro.
+// Jogo: esquiva = 22 quadros (engine.cpp startDodge / ai.cpp FIGHTER_DODGE_L/R), desloca ~54 e sobe ~18 no auge.
+const DODGE = { lean: 22 / 60, hop: 40 / 60 };
+const dodgeKnee = new THREE.Vector3();   // empurra os joelhos para o lado do salto
+let dodge = null;
+function startDodge(spec) {
+  if (dodge) return;
+  const [dir, mode] = spec.split(':');
+  dodge = { dir, mode, t: 0, dur: DODGE[mode] };
+}
+// devolve o que o corpo faz neste quadro; o deslocamento do salto vai no objeto inteiro (os pés vão junto)
+function dodgeUpdate(dt) {
+  const out = { roll: 0, lean: 0, shift: new THREE.Vector3(), drop: 0, lift: 0, tuck: 0 };
+  if (!dodge) { frog.position.set(0, 0, 0); return out; }
+  dodge.t += dt;
+  const p = Math.min(1, dodge.t / dodge.dur);
+  const sx = dodge.dir === 'L' ? 1 : dodge.dir === 'R' ? -1 : 0, back = dodge.dir === 'B';
+  if (dodge.mode === 'lean') {
+    // sai rápido (35% do tempo), segura um instante e volta macio
+    const k = p < 0.35 ? THREE.MathUtils.smoothstep(p, 0, 0.35) : p < 0.55 ? 1 : 1 - THREE.MathUtils.smoothstep(p, 0.55, 1);
+    if (back) { out.lean = -20 * k; out.drop = 0.06 * k; out.shift.set(0, 0, -0.08 * k); }
+    else { out.roll = sx * 24 * k; out.shift.set(sx * 0.12 * k, 0, 0); out.drop = 0.07 * k; }
+    frog.position.set(0, 0, 0);
+  } else {
+    // pulo em 4 tempos: agacha flexionando os joelhos para o lado do salto -> estica e sai do chão ->
+    // aterrissa amortecendo -> volta para o centro arrastando os pés (como o jogo, que sempre volta à guarda)
+    const ss = THREE.MathUtils.smoothstep;
+    const dist = back ? 0.5 : 0.55, dx = sx * dist, dz = back ? -dist : 0;
+    const crouch = ss(p, 0, 0.2) * (1 - ss(p, 0.2, 0.3));                 // impulso
+    const air = ss(p, 0.24, 0.3) * (1 - ss(p, 0.52, 0.58));                // pés fora do chão
+    const land = ss(p, 0.55, 0.62) * (1 - ss(p, 0.62, 0.78));              // amortece a queda
+    const out_ = ss(p, 0.22, 0.58) * (1 - ss(p, 0.72, 1));                 // ida e volta
+    const h = 0.22 * Math.sin(Math.PI * THREE.MathUtils.clamp((p - 0.24) / 0.32, 0, 1));
+    frog.position.set(dx * out_, h, dz * out_);
+    out.drop = 0.13 * crouch + 0.1 * land;
+    out.shift.set(sx * 0.07 * crouch, 0, back ? -0.05 * crouch : 0);      // quadril pende para o lado do salto
+    out.tuck = air;
+    dodgeKnee.set(sx * 0.6 * (crouch + land + air * 0.5), 0, back ? -0.5 * (crouch + land) : 0);   // joelhos apontam para onde vai
+    if (back) out.lean = 7 * crouch - 9 * air + 5 * land;
+    else out.roll = sx * (8 * crouch + 12 * air - 4 * land);
+  }
+  if (p >= 1) dodgeKnee.set(0, 0, 0);
+  if (p >= 1) { dodge = null; frog.position.set(0, 0, 0); }
+  return out;
+}
+
+// guarda: luvas na altura do queixo, seguindo o giro do tronco
+function guardTargets(yaw) {
+  const chest = new THREE.Vector3(); bones.Spine02.getWorldPosition(chest);
+  const q = new THREE.Quaternion().setFromAxisAngle(UP, THREE.MathUtils.degToRad(yaw * 0.8));
+  const [gx, gy, gz] = CHAR.guard || [0.48, 0.32, 0.46];
+  return { L: chest.clone().add(new THREE.Vector3(gx, gy, gz).multiplyScalar(SC).applyQuaternion(q)), R: chest.clone().add(new THREE.Vector3(-gx, gy, gz).multiplyScalar(SC).applyQuaternion(q)) };
+}
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest('button[data-move]'); if (!b || b.dataset.move === 'guard') return;
+  charge = { move: b.dataset.move, t: 0, ratio: 0, btn: b }; move = null; oneShot = false; moveScale = 1;
+});
+addEventListener('pointerup', () => {
+  if (!charge) return;
+  if (charge.t < 0.15) { charge = null; return; }   // toque: o clique normal cuida (golpe em repetição)
+  releaseCharge(); suppressClick = true; setTimeout(() => (suppressClick = false), 0);   // engole só o clique deste mesmo soltar
+});
+let suppressClick = false;
+document.addEventListener('click', e => {
+  if (suppressClick) { suppressClick = false; return; }
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.cam) { setCam(b.dataset.cam); mark('[data-cam]', b); }
+  if (b.dataset.move) { move = b.dataset.move === 'guard' ? null : b.dataset.move; moveT = 0; mark('[data-move]', b); }
+  if (b.dataset.face) { setFace(b.dataset.face); mark('[data-face]', b); }
+  if (b.dataset.hit) { hit = b.dataset.hit; hitT = 0; hitstop = +$('#hitstop').value * (hit === 'light' ? 1 : 1.6); setFace(hit === 'ko' ? 'ko' : 'pain'); if (hit === 'ko') launchCrown(); }
+  if (b.id === 'reset') resetCrown();
+  if (b.dataset.dodge) startDodge(b.dataset.dodge);
+  if (b.dataset.step) { stepLoop = false; startStep(+b.dataset.step); }
+  if (b.id === 'stepLoop') { stepLoop = !stepLoop; b.classList.toggle('on', stepLoop); }
+  if (b.id === 'tongue' && tongueT < 0) tongueT = 0;
+  if (b.id === 'tell') { papoTarget = 4; setTimeout(() => { papoTarget = 0; papoVel -= 6; }, GAME.tell * 1000); }
+  if (b.id === 'spit' && spitT < 0) spitT = 0;
+  if (b.id === 'feint') { papoTarget = 3; setTimeout(() => (papoTarget = 0), GAME.tell * 1000); }
+});
+function mark(sel, b) { document.querySelectorAll(sel).forEach(x => x.classList.toggle('on', x === b)); }
+let shownFace = 'normal';
+function setFace(f) { face = f; shownFace = f; eyeL.material.map = eyeR.material.map = faceTex[f].eye; if (eyesDecal) { eyesDecal[0].material.map = faceTex[f].eyeA; eyesDecal[1].material.map = faceTex[f].eyeB; } mouth.material.map = faceTex[f].mouth; }
+function launchCrown() { hatHair.on.value = 0; scene.attach(crown); crownFly = { v: new THREE.Vector3(0.6, 3.4, -1.6), spin: 9 }; }
+function resetCrown() { if (CHAR.hair || CHAR.wig?.hat) hatHair.on.value = 1; crownFly = null; sockets.head_top.add(crown); crown.position.copy(crown.userData.home); crown.quaternion.copy(crown.userData.homeQ); crown.scale.setScalar(CROWN_SCALE); setFace('normal'); }
+
+// para conferir quadro a quadro: POSE.set('cross', 0.25) congela o golpe nesse instante
+window.TONGUE = { at(t) { tongueT = t; window.POSE.freeze = true; } };   // TONGUE.at(1.1) congela a língua esticada
+window.POSE = { freeze: false, set(m, t) { move = m; moveT = t; this.freeze = true; }, play() { this.freeze = false; } };
+// ---------------------------------------------------------------- laço
+const clock = new THREE.Clock();
+const pole = new THREE.Vector3();
+let stepAcc = 0;
+function tick() {
+  requestAnimationFrame(tick);
+  let dt = Math.min(0.05, clock.getDelta());
+  const step = 1 / +$('#animFps').value;
+  stepAcc += dt;
+  if (stepAcc < step) { controls.update(); draw(); return; }   // segura o quadro (animação em "dois")
+  dt = stepAcc; stepAcc = 0;
+  if (hitstop > 0) { hitstop -= dt; dt = 0; }                         // pausa de impacto: tudo congela
+  if (window.POSE.freeze) dt = 0;
+  if (charge) { charge.t += dt; charge.ratio = Math.min(1, charge.t / (72 / 60)); if (charge.t > 96 / 60) releaseCharge(); }
+  if (move) {
+    moveT += dt;
+    const D = MOVES[move].dur * moveScale;
+    if (oneShot && moveT > D) { move = null; oneShot = false; moveScale = 1; mark('[data-move]', document.querySelector('[data-move="guard"]')); }
+    else if (moveT > D + 0.35) moveT = 0;   // repete com uma pausa curta em guarda
+  }
+  if (hit) { hitT += dt; if (hitT > (hit === 'ko' ? 1.4 : 0.6)) { hit = null; if (face === 'pain') setFace('normal'); } }
+  const t = clock.elapsedTime;
+  if (!feet) initFeet();
+  const st = stepUpdate(dt);
+  const pose = bodyPose(t, dt);
+  let danceFoot = null;
+  // na passada lateral ela também samba; o gingado entra e sai aos poucos (sem pulo entre um passo e outro)
+  if (danceMixer) danceW += ((danceOn || stepS || stepLoop ? 1 : 0) - danceW) * Math.min(1, dt * 5);
+  if (danceMixer && danceW > 0.01) {   // dança contida (dá para lutar): só o gingado — quadril e tronco pela metade, giro do quadril
+    // limitado (não vira de costas), pés com metade do passo; braços ficam na guarda e a cabeça sempre de frente
+    const K = (CHAR.danceAmt ?? 0.5) * danceW, TW = THREE.MathUtils.degToRad(20) * danceW;
+    const snap = new Map(); for (const b of Object.values(bones)) snap.set(b, [b.quaternion.clone(), b.position.clone()]);
+    const headW = bones.Head.getWorldQuaternion(new THREE.Quaternion());
+    danceMixer.update(dt); frog.updateMatrixWorld(true);
+    danceFoot = {};
+    for (const k of ['Left', 'Right']) {
+      const d = bones[k + 'Foot'].getWorldPosition(new THREE.Vector3()).sub(feet.home[k]).multiplyScalar(K);
+      d.x = THREE.MathUtils.clamp(d.x, -0.12, 0.12); d.z = THREE.MathUtils.clamp(d.z, -0.12, 0.12); d.y = THREE.MathUtils.clamp(d.y, 0, 0.12);
+      danceFoot[k] = d;
+    }
+    for (const [b, [q, p]] of snap) {
+      if (b === bones.Hips) {
+        const blend = q.clone().slerp(b.quaternion, K);
+        const D = blend.clone().multiply(q.clone().invert());                 // quanto a dança girou o quadril (espaço do pai)
+        if (D.w < 0) D.set(-D.x, -D.y, -D.z, -D.w);                            // lado curto (senão o limite do giro pula de um extremo ao outro)
+        const up = UP.clone().applyQuaternion(b.parent.getWorldQuaternion(new THREE.Quaternion()).invert());
+        const v = new THREE.Vector3(D.x, D.y, D.z), proj = up.clone().multiplyScalar(v.dot(up));
+        const tw = new THREE.Quaternion(proj.x, proj.y, proj.z, D.w).normalize();
+        const ang = 2 * Math.atan2(proj.dot(up), tw.w), twC = new THREE.Quaternion().setFromAxisAngle(up, THREE.MathUtils.clamp(ang, -TW, TW));
+        const swing = D.clone().multiply(tw.clone().invert());
+        b.quaternion.copy(swing.multiply(twC).multiply(q));
+        b.position.copy(p).add(b.position.clone().sub(rest.get(b).p).multiplyScalar(K).setY(0));
+      } else if (/^Spine/.test(b.name)) { b.quaternion.copy(q.clone().slerp(b.quaternion, K)); b.position.copy(p); }
+      else { b.quaternion.copy(q); b.position.copy(p); }
+    }
+    frog.updateMatrixWorld(true);
+    bones.Head.quaternion.copy(bones.Head.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(headW));   // cabeça de frente pro adversário
+    frog.updateMatrixWorld(true);
+  }
+  if (st.lean) { rotWorld(bones.Hips, FWD, st.lean); rotWorld(bones.Head, FWD, -st.lean * 0.7); }
+  if (st.drop) { bones.Hips.position.y -= st.drop / Math.max(1e-6, bones.Hips.parent.getWorldScale(new THREE.Vector3()).y); bones.Hips.updateMatrixWorld(true); }
+  const dg = dodgeUpdate(dt);
+  if (dg.roll || dg.lean || dg.drop || dg.shift.lengthSq()) {
+    const H = bones.Hips, wp = H.getWorldPosition(new THREE.Vector3()).add(dg.shift).add(new THREE.Vector3(0, -dg.drop, 0));
+    H.position.copy(H.parent.worldToLocal(wp)); H.updateMatrixWorld(true);
+    if (dg.roll) {
+      // tronco tomba para o lado, a cabeça segura a linha dos olhos (não fica deitada)
+      rotWorld(bones.Hips, FWD, -dg.roll * 0.25);
+      for (const sp of ['Spine', 'Spine01', 'Spine02']) rotWorld(bones[sp], FWD, -dg.roll * 0.25);
+      rotWorld(bones.Head, FWD, dg.roll * 0.45);
+    }
+    if (dg.lean) { rotWorld(bones.Hips, RIGHT, dg.lean * 0.4); for (const sp of ['Spine01', 'Spine02']) rotWorld(bones[sp], RIGHT, dg.lean * 0.3); rotWorld(bones.Head, RIGHT, -dg.lean * 0.5); }
+  }
+  // no ar os pés saem do chão junto com o corpo e encolhem um pouco
+  if (feet) {
+    for (const k of ['Left', 'Right']) {
+      if (stepS) continue;
+      feet[k].copy(feet.home[k]).add(frog.position).add(new THREE.Vector3(0, 0.1 * dg.tuck, 0.04 * dg.tuck));
+      if (danceFoot) feet[k].add(danceFoot[k]);   // passinho do samba (contido)
+    }
+  }
+  legsIK();
+  if (belt) {
+    _bm.multiplyMatrices(bones.Hips.matrixWorld, belt.userData.rest); _bm.decompose(_bp, _bq, _bs);
+    if (beltY === null) { beltY = _bp.y; _bqs.copy(_bq); }
+    for (let i = 0; i < 6; i++) { const h = dt / 6; beltV += ((_bp.y - beltY) * 400 - beltV * 40) * h; beltY += beltV * h; }   // mola: atrasa um pouco e assenta
+    _bqs.copy(_bq);   // gira junto com o quadril (atrasar o giro fazia ele atravessar as costas)
+    _bp.y = beltY; belt.matrix.compose(_bp, _bqs, _bs); belt.matrixWorldNeedsUpdate = true;
+  }
+  // luvas: guarda + golpe; a luva que não soca fecha no queixo
+  const g = guardTargets(pose.yaw);
+  if (pose.glove) {
+    const sx = pose.side === 'L' ? 1 : -1;
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(UP, THREE.MathUtils.degToRad(pose.yaw * 0.35));
+    g[pose.side].add(new THREE.Vector3(pose.glove.x * sx, pose.glove.y, pose.glove.z).multiplyScalar(SC).applyQuaternion(yawQ));
+    const other = pose.side === 'L' ? 'R' : 'L', tight = bump(pose.p * 1.2);
+    g[other].add(new THREE.Vector3(0.12 * sx, 0.06, -0.05).multiplyScalar(tight));
+  }
+  if (charge) {
+    // jogo (animateChargingPose): luva vai para trás na altura da costela, um pouco para fora, e treme mais quanto mais carga
+    const r = charge.ratio, sd = MOVES[charge.move].side, sx = sd === 'L' ? 1 : -1, amp = 0.004 * (1 + 3.5 * r);
+    const yq2 = new THREE.Quaternion().setFromAxisAngle(UP, THREE.MathUtils.degToRad(pose.yaw * 0.8));
+    g[sd].add(new THREE.Vector3(sx * (0.05 + 0.06 * r), -0.12 - 0.08 * r, -0.12 - 0.18 * r).multiplyScalar(SC).applyQuaternion(yq2))
+         .add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(amp * 2));
+  }
+  const tl2 = tellPose();
+  if (tl2) {
+    // acumulando para a língua/lama: baixa as duas luvas para a frente da barriga e abre um pouco, tremendo de leve
+    for (const sd of ['L', 'R']) {
+      const sx = sd === 'L' ? 1 : -1;
+      g[sd].add(new THREE.Vector3(sx * 0.06 * tl2, -0.2 * tl2, -0.04 * tl2)).add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, 0).multiplyScalar(0.012 * tl2));
+    }
+  }
+  // a luva nunca entra na cabeça: se o alvo cair dentro da esfera da cabeça, empurra para fora (e para a frente)
+  if (CHAR.headR) {
+    const hc = bones.Head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, CHAR.headR * 0.35, 0));
+    for (const k of ['L', 'R']) {
+      const d = g[k].clone().sub(hc), need = CHAR.headR + CHAR.gloveR;
+      if (d.length() < need) { if (d.z < 0.05) d.z = 0.05; g[k].copy(hc).addScaledVector(d.normalize(), need); }
+    }
+  }
+  for (const k of ['L', 'R']) {
+    const side = k === 'L' ? 'Left' : 'Right';
+    // braço volta ao repouso antes do IK: senão a torção vai acumulando de um quadro para o outro e o
+    // antebraço vira um "pacote de bala" (fica fininho torcido)
+    for (const b of ['Arm', 'ForeArm', 'Hand']) { const r = rest.get(bones[side + b]); if (r) bones[side + b].quaternion.copy(r.q); }
+    bones[side + 'Arm'].updateMatrixWorld(true);
+    const sh = new THREE.Vector3(); bones[side + 'Arm'].getWorldPosition(sh);
+    const pl = CHAR.pole || [0.55, -0.7, -0.35];
+    pole.copy(sh).add(new THREE.Vector3(k === 'L' ? pl[0] : -pl[0], pl[1], pl[2]));   // cotovelo para fora, para baixo e para trás
+    if (move === 'upper' && pose.side === k) pole.lerp(sh.clone().add(new THREE.Vector3(k === 'L' ? 0.2 : -0.2, -0.9, 0.35)), bump(pose.p));   // uppercut: cotovelo por baixo
+    solveIK(bones[side + 'Arm'], bones[side + 'ForeArm'], bones[side + 'Hand'], g[k], pole);
+    // luva: punho no alvo, nós dos dedos apontando para onde o golpe vai
+    const hand = new THREE.Vector3(), fore = new THREE.Vector3(); bones[side + 'Hand'].getWorldPosition(hand); bones[side + 'ForeArm'].getWorldPosition(fore);
+    const dir = hand.clone().sub(fore).normalize();
+    gloves[k].position.copy(hand).addScaledVector(dir, GLOVE_SINK);   // a malha não tem mão: o toco do pulso entra na boca da luva
+    // giro do punho: na guarda e no uppercut as costas da mão olham para a frente (dedos voltados para ele);
+    // nos socos retos e no gancho as costas da mão viram para cima (palma para baixo)
+    const yq = new THREE.Quaternion().setFromAxisAngle(UP, THREE.MathUtils.degToRad(pose.yaw * 0.8));
+    let zRef = FWD.clone().applyQuaternion(yq);
+    if (pose.glove && pose.side === k && move !== 'upper') zRef.lerp(UP, bump(Math.min(1, pose.p * 1.6)));
+    if (CHAR.fistForward && !(pose.glove && pose.side === k)) {   // guarda: punho apontando reto para a frente (não segue o antebraço torto)
+      dir.lerp(new THREE.Vector3(0, -0.15, 1).normalize().applyQuaternion(yq), CHAR.fistForward).normalize();
+    }
+    zRef.negate();   // o +Z do modelo da luva é o lado da palma: aponta para ele (guarda/uppercut) ou para baixo (socos)
+    if (CHAR.palmsIn && !(pose.glove && pose.side === k)) zRef.set(k === 'L' ? -1 : 1, 0, 0).applyQuaternion(yq);   // guarda: palmas para dentro
+    if (CHAR.holesUp) zRef.set(k === 'L' ? -0.35 : 0.35, 1, 0).normalize();   // colmeia: furos (+Z do modelo) para cima, levemente inclinados para dentro
+    const zA = zRef.addScaledVector(dir, -zRef.dot(dir)).normalize(), xA = new THREE.Vector3().crossVectors(dir, zA);
+    gloves[k].quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, dir, zA));
+    if (umbrellas) {   // guarda-chuva no punho: na guarda aberto e inclinado para fora (escudo ao lado, rosto livre); no soco aponta para a frente e fecha
+      const u = umbrellas[k], side = k === 'L' ? 1 : -1, hit = pose.glove && pose.side === k;
+      const d = new THREE.Vector3(side * 0.55, 0.12, 0.83).normalize().applyQuaternion(yq);
+      if (hit) d.lerp(FWD.clone().applyQuaternion(yq).add(new THREE.Vector3(0, 0.1, 0)).normalize(), Math.min(1, pose.p * 2.5)).normalize();
+      // o punho gira no eixo do antebraço até o furo dos dedos (eixo X dele) ficar na direção do guarda-chuva; o cabo passa ali
+      // o pulso dobra (até 45°) para o punho ficar de través ao guarda-chuva: a haste sai na direção pedida
+      const yIdeal = dir.clone().addScaledVector(d, -dir.dot(d)).normalize();
+      const bend = Math.min(1, THREE.MathUtils.degToRad(45) / Math.max(1e-3, dir.angleTo(yIdeal)));
+      const yF = dir.clone().lerp(yIdeal, bend).normalize();
+      const xU = d.clone().addScaledVector(yF, -d.dot(yF)).normalize(), zU = new THREE.Vector3().crossVectors(xU, yF);
+      gloves[k].quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xU, yF, zU));
+      u.position.copy(gloves[k].position).addScaledVector(yF, 0.075 * CHAR.gloveScale); u.quaternion.setFromUnitVectors(UP, xU);
+      const goal = crownFly ? 0.4 : hit ? 0 : 1, opening = goal > umbOpen[k];
+      const kk = opening ? 90 : 260, cc = opening ? 15 : 24;
+      for (let i = 0; i < 4; i++) { const h = dt / 4; umbVel[k] += (kk * (goal - umbOpen[k]) - cc * umbVel[k]) * h; umbOpen[k] += umbVel[k] * h; }
+      u.userData.setOpen(THREE.MathUtils.clamp(umbOpen[k], 0, 1.05));
+    }
+    if (CHAR.gloveTwist) gloves[k].quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(UP, Array.isArray(CHAR.gloveTwist) ? CHAR.gloveTwist[k === 'L' ? 0 : 1] : (k === 'L' ? CHAR.gloveTwist : -CHAR.gloveTwist)));   // [L, R]: giro de cada peça no eixo do antebraço
+  }
+  // garra da Joana: a pinça (nó 'pinca', origem na dobradiça) abre e fecha — tique na guarda, fecha no impacto, solta no K.O.
+  if (CHAR.claw) {
+    const pin = gloves[CHAR.claw.side] && gloves[CHAR.claw.side].getObjectByName('pinca');
+    if (pin) {
+      // ângulo de abertura (0 = fechada, pontas encostadas); mola com rebote: abre rápido e fecha num estalo que quica
+      clawT += dt;
+      let open;
+      if (crownFly) open = 0.6;                                                             // K.O.: aberta e mole
+      else if (pose.glove && pose.side === CHAR.claw.side) open = pose.p < 0.4 ? 0.75 : 0;   // abre no preparo, fecha no impacto
+      else {   // tique da guarda: abre devagar, segura, fecha num estalo; às vezes estala duas vezes
+        const ph = clawT % 3.2, dbl = Math.floor(clawT / 3.2) % 3 === 1;
+        open = (ph < 0.7 || (dbl && ph > 1.3 && ph < 1.9)) ? 0.65 : 0;
+      }
+      // a pose anda em quadros espaçados (animFps ~11): o movimento tem de durar vários quadros para não "teleportar".
+      // abrindo: mola macia (~0,45 s, sem quicar); fechando: mola rápida e pouco amortecida (estalo que quica ~0,4 s); K.O.: mole
+      const opening = open > clawA, k = crownFly ? 40 : opening ? 60 : 180, c = crownFly ? 5 : opening ? 13 : 12;
+      for (let i = 0; i < 4; i++) { const h = dt / 4; clawV += (k * (open - clawA) - c * clawV) * h; clawA += clawV * h; }
+      pin.rotation.x = CHAR.claw.dir * (clawA - CHAR.claw.closed);
+    }
+  }
+  lavaU.time.value += dt;
+  if (skirtMesh) {   // coxas no espaço da malha da saia (para o shader empurrar o pano para fora delas)
+    const inv = skirtMesh.matrixWorld.clone().invert(), sc = skirtMesh.getWorldScale(new THREE.Vector3()).x;
+    ['Left', 'Right'].forEach((sd, i) => {
+      skirtLeg.a.value[i].copy(bones[sd + 'UpLeg'].getWorldPosition(new THREE.Vector3())).applyMatrix4(inv);
+      skirtLeg.b.value[i].copy(bones[sd + 'Leg'].getWorldPosition(new THREE.Vector3())).applyMatrix4(inv);
+    });
+    skirtLeg.r.value = (CHAR.skirt.legR || 0.11) / sc;
+  }
+  if (skirt) {   // barra da saia: atrasa contra o quadril (mola do sway.off), no espaço do quadril; nunca para dentro das pernas (só para fora/trás)
+    const q = skirt.getWorldQuaternion(new THREE.Quaternion()).invert();
+    skirtOff.value.copy(sway.off).multiplyScalar(1.6).applyQuaternion(q);
+  }
+  // papo: mola em direção ao estágio pedido
+  const manual = +$('#papo').value; const goal = Math.max(papoTarget, manual);
+  for (let i = 0; i < 6; i++) { const h = dt / 6; papoVel += ((goal - papoNow) * 90 - papoVel * 11) * h; papoNow += papoVel * h; }
+  papoNow = Math.max(0, papoNow); $('#papoV').textContent = papoNow.toFixed(2);
+  papoNow = Math.min(papoNow, 4 * (1 - Math.min(1, mouthOpenU.value * 3)));   // boca aberta: papo murcho
+  layoutPapo(papoNow + (papoNow > 0.3 ? 0.08 * Math.sin(clock.elapsedTime * 9) * Math.min(1, papoNow) : 0), sway.papoW);   // pulsa enquanto cheio
+  placeFace();
+  if (crabEyeMesh) { const t = crabEyeMesh.userData.tex[shownFace === 'ko' ? 'ko' : 'normal']; if (crabEyeMesh.material.map !== t) crabEyeMesh.material.map = t; }   // pupila desenhada; no K.O. vira X
+  if (CHAR.crabEye && !crabEyeMesh) {   // olho animado no globo do olho de siri (projetado nele, gira com a cabeça)
+    // pupila do olho de siri desenhada (a da textura foi apagada por pintar_olho_siri.py); no K.O. vira um X
+    const xTex = faceCanvas(g => { g.strokeStyle = INK;
+      g.lineWidth = 14; g.lineCap = 'round'; g.beginPath(); g.moveTo(36, 36); g.lineTo(92, 92); g.moveTo(92, 36); g.lineTo(36, 92); g.stroke(); });
+    const pupilTex = faceCanvas(g => { g.fillStyle = INK; g.beginPath(); g.arc(64, 64, 40, 0, 7); g.fill(); g.fillStyle = '#ffffff'; g.beginPath(); g.arc(76, 52, 9, 0, 7); g.fill(); });
+    crabEyeMesh = new THREE.Mesh(new THREE.BufferGeometry(), planeMat(pupilTex));
+    crabEyeMesh.userData.tex = { normal: pupilTex, ko: xTex };
+    bones.Head.add(crabEyeMesh);
+    $('#crabEyeCtl').style.display = '';
+    const E = CHAR.crabEye;
+    $('#ceX').value = E.dx || 0; $('#ceY').value = E.dy || 0; $('#ceS').value = E.size;
+    const build = () => {   // ↔ e ↕ em metros a partir do centro do globo; o olho é projetado na superfície dele
+      const w = new THREE.Vector3(E.pos[0] + +$('#ceX').value, E.pos[1] + +$('#ceY').value, E.pos[2]);
+      const c = w.applyMatrix4(new THREE.Matrix4().copy(headRest).invert()), sz = +$('#ceS').value;
+      crabEyeMesh.geometry.dispose(); crabEyeMesh.geometry = decal(c, sz, sz, 10, 10, 0.004).g;
+    };
+    for (const id of ['ceX', 'ceY', 'ceS']) { const el = $('#' + id), sp = el.nextElementSibling; const upd = () => { sp.textContent = (+el.value).toFixed(3); build(); }; el.addEventListener('input', upd); sp.textContent = (+el.value).toFixed(3); }
+    build();
+  }
+  // expressão de esforço: carregando = raiva e dentes rangendo; acumulando língua/lama = olhos serrados
+  const want = hit ? null : charge && charge.t > 0.15 ? 'grit' : tellPose() > 0.25 ? 'squint' : face;
+  if (want && want !== shownFace) { shownFace = want; eyeL.material.map = eyeR.material.map = faceTex[want].eye; if (eyesDecal) { eyesDecal[0].material.map = faceTex[want].eyeA; eyesDecal[1].material.map = faceTex[want].eyeB; } mouth.material.map = faceTex[want].mouth; }
+  const open = Math.max(+$('#mouthOpen').value, tongueAnim(dt), spitAnim(dt));
+  mouthRoundU.value = mouthRound;
+  mudUpdate(dt); swayUpdate(dt); tailUpdate(dt, clock.elapsedTime);
+  mouthOpenU.value = open; mouth.visible = open < 0.06;
+  // boca abrindo: o papo já esvaziou (no mesmo quadro, senão a garganta inchada atravessa a abertura)
+  if (open > 0.01) { papoNow = 0; papoVel = 0; layoutPapo(0, 0); }
+  if (tongueT < 0) setTongue(mouthParts.rest);
+  mouthParts.tongue.visible = open > 0.01;   // de boca fechada a língua não existe (não fura o queixo)
+  // coroa voando no K.O.
+  if (crownFly) { crownFly.v.y -= 9.8 * dt; crown.position.addScaledVector(crownFly.v, dt); crown.rotation.x += crownFly.spin * dt; crown.rotation.z += crownFly.spin * 0.6 * dt; if (crown.position.y < 0.05) { crown.position.y = 0.05; crownFly.v.multiplyScalar(0.4); crownFly.v.y = Math.abs(crownFly.v.y) * 0.5; crownFly.spin *= 0.6; } }
+  controls.update();
+  draw();
+}
+function draw() {
+  if (OUTLINE_MODE === 'tela') { renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(postScene, postCam); }
+  else renderer.render(scene, camera);
+}
+tick();
+</script>
+</body>
+</html>

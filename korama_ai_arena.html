@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KO-RAMA • Arena de Simulação IA vs IA</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=JetBrains+Mono:wght@400;700&display=swap');
+    
+    :root {
+      --font-display: 'Chakra Petch', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      font-family: var(--font-display);
+      background-color: #08060f;
+      color: #f1f0f7;
+      overflow-x: hidden;
+    }
+
+    .font-mono {
+      font-family: var(--font-mono);
+    }
+
+    /* Glows & Neon styles */
+    .neon-red {
+      text-shadow: 0 0 10px rgba(239, 68, 68, 0.6), 0 0 20px rgba(239, 68, 68, 0.3);
+    }
+    .neon-blue {
+      text-shadow: 0 0 10px rgba(59, 130, 246, 0.6), 0 0 20px rgba(59, 130, 246, 0.3);
+    }
+    .neon-gold {
+      text-shadow: 0 0 10px rgba(234, 179, 8, 0.6), 0 0 20px rgba(234, 179, 8, 0.3);
+    }
+    .neon-cyan {
+      text-shadow: 0 0 10px rgba(6, 182, 212, 0.6), 0 0 20px rgba(6, 182, 212, 0.3);
+    }
+
+    .card-panel {
+      background: linear-gradient(145deg, #130f24 0%, #0d0a1a 100%);
+      border: 1px solid #2a2245;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090712;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2a2245;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #493b77;
+    }
+  </style>
+</head>
+<body class="p-3 sm:p-5 select-none">
+  <!-- Top Bar -->
+  <header class="max-w-7xl mx-auto mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/40 pb-3">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-rose-600 via-amber-500 to-cyan-400 p-0.5 shadow-lg shadow-purple-950/80">
+        <div class="w-full h-full bg-[#0d0a1a] rounded-[7px] flex items-center justify-center font-bold text-amber-400 text-lg">
+          🥊
+        </div>
+      </div>
+      <div>
+        <h1 class="text-xl sm:text-2xl font-black tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-amber-400 via-rose-400 to-cyan-400">
+          KO-RAMA • AI ARENA
+        </h1>
+        <p class="text-xs text-purple-300/70 font-mono">Simulador de Combate IA vs IA com Rotação 3D do Ringue & Análise em Tempo Real</p>
+      </div>
+    </div>
+
+    <!-- Quick Stats Summary Badge -->
+    <div class="flex items-center gap-2 bg-[#120e24] px-3 py-1.5 rounded-lg border border-purple-800/40 text-xs font-mono">
+      <span class="text-gray-400">PARTIDAS SIMULADAS:</span>
+      <span id="headerMatchCount" class="font-bold text-cyan-400">0</span>
+      <span class="text-gray-600">|</span>
+      <button id="audioToggleBtn" class="flex items-center gap-1.5 text-purple-300 hover:text-white transition px-2 py-0.5 rounded bg-purple-950/60 border border-purple-700/40">
+        <span id="audioIcon">🔊</span>
+        <span id="audioLabel" class="text-[11px]">ÁUDIO ATIVO</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- Left Column: Combat Canvas & Live Controls (8 Cols) -->
+    <div class="lg:col-span-8 flex flex-col gap-3">
+
+      <!-- Fighter Header Cards (Versus bar) -->
+      <div class="grid grid-cols-2 gap-2">
+        <!-- Fighter 1 Card -->
+        <div class="card-panel rounded-xl p-3 border-l-4 border-l-red-500 flex flex-col justify-between relative overflow-hidden">
+          <div class="absolute -right-4 -bottom-4 text-7xl font-black text-red-500/5 select-none pointer-events-none">P1</div>
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <span id="p1Badge" class="text-xl">🐝</span>
+              <div>
+                <h3 id="p1Name" class="font-bold text-base text-red-400 leading-tight">JACK</h3>
+                <span id="p1Title" class="text-[10px] text-gray-400 block font-mono">O APICULTOR</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span id="p1HpNum" class="text-sm font-mono font-bold text-red-300">100 / 100</span>
+              <div class="text-[10px] text-gray-400 font-mono">KDs: <span id="p1KdCount" class="text-amber-400 font-bold">0</span>/3</div>
+            </div>
+          </div>
+          <!-- HP Bar -->
+          <div class="w-full h-3.5 bg-black/60 rounded-full overflow-hidden p-0.5 border border-red-950 relative mb-1">
+            <div id="p1HpLag" class="h-full bg-red-800/80 rounded-full transition-all duration-300 absolute left-0.5 top-0.5 w-full"></div>
+            <div id="p1HpFill" class="h-full bg-gradient-to-r from-red-600 to-rose-400 rounded-full transition-all duration-75 relative z-10 w-full shadow-lg shadow-red-500/50"></div>
+          </div>
+          <!-- Stamina Bar -->
+          <div class="w-full h-1.5 bg-black/60 rounded-full overflow-hidden relative">
+            <div id="p1StaminaFill" class="h-full bg-cyan-400 rounded-full transition-all duration-75 w-full"></div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] font-mono mt-1 text-gray-400">
+            <span id="p1State" class="text-gray-300">IDLE</span>
+            <span id="p1BuildText" class="text-purple-300 truncate max-w-[140px]">Infestação / Melaço</span>
+          </div>
+        </div>
+
+        <!-- Fighter 2 Card -->
+        <div class="card-panel rounded-xl p-3 border-r-4 border-r-blue-500 flex flex-col justify-between relative overflow-hidden">
+          <div class="absolute -left-4 -bottom-4 text-7xl font-black text-blue-500/5 select-none pointer-events-none">P2</div>
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="text-left">
+              <span id="p2HpNum" class="text-sm font-mono font-bold text-blue-300">100 / 100</span>
+              <div class="text-[10px] text-gray-400 font-mono">KDs: <span id="p2KdCount" class="text-amber-400 font-bold">0</span>/3</div>
+            </div>
+            <div class="flex items-center gap-2 text-right">
+              <div>
+                <h3 id="p2Name" class="font-bold text-base text-blue-400 leading-tight">KING FROG</h3>
+                <span id="p2Title" class="text-[10px] text-gray-400 block font-mono">REI DO CHARCO</span>
+              </div>
+              <span id="p2Badge" class="text-xl">🐸</span>
+            </div>
+          </div>
+          <!-- HP Bar -->
+          <div class="w-full h-3.5 bg-black/60 rounded-full overflow-hidden p-0.5 border border-blue-950 relative mb-1">
+            <div id="p2HpLag" class="h-full bg-blue-800/80 rounded-full transition-all duration-300 absolute right-0.5 top-0.5 w-full"></div>
+            <div id="p2HpFill" class="h-full bg-gradient-to-l from-blue-600 to-indigo-400 rounded-full transition-all duration-75 relative z-10 w-full ml-auto shadow-lg shadow-blue-500/50"></div>
+          </div>
+          <!-- Stamina Bar -->
+          <div class="w-full h-1.5 bg-black/60 rounded-full overflow-hidden relative">
+            <div id="p2StaminaFill" class="h-full bg-cyan-400 rounded-full transition-all duration-75 w-full ml-auto"></div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] font-mono mt-1 text-gray-400">
+            <span id="p2BuildText" class="text-purple-300 truncate max-w-[140px]">Língua / Pele Venenosa</span>
+            <span id="p2State" class="text-gray-300">IDLE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ring Visual Canvas Area -->
+      <div class="card-panel rounded-xl p-2 relative overflow-hidden flex flex-col items-center">
+        <!-- Live HUD Overlay -->
+        <div class="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-20 font-mono text-xs">
+          <div class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded border border-purple-500/30 text-amber-400">
+            ROUND <span id="roundNum" class="font-bold text-white">1</span>
+          </div>
+          <div id="ringBanner" class="bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-amber-500/40 text-amber-300 text-xs font-bold tracking-widest hidden animate-pulse">
+            BRECHA!
+          </div>
+          <div class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded border border-purple-500/30 text-cyan-400">
+            ⏱ <span id="roundTimer" class="font-bold text-white">3:00</span>
+          </div>
+        </div>
+
+        <!-- 3D Ring Rotation Indicator -->
+        <div class="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded border border-purple-500/30 text-[11px] font-mono text-gray-300 flex items-center gap-2 pointer-events-none z-20">
+          <span>ÂNGULO DO RINGUE:</span>
+          <span id="ringAngleDeg" class="text-amber-400 font-bold">0°</span>
+          <span class="text-gray-600">|</span>
+          <span id="ringQuadrantLabel" class="text-cyan-400">ARESTA NORTE</span>
+        </div>
+
+        <!-- Referee Count Modal Overlay -->
+        <div id="refereeOverlay" class="absolute inset-0 bg-black/70 backdrop-blur-sm z-30 flex flex-col items-center justify-center hidden">
+          <span class="text-xs font-mono text-amber-400 tracking-widest mb-1">CONTAGEM DO JUIZ</span>
+          <h2 id="refereeCountText" class="text-6xl font-black text-rose-500 animate-bounce">1</h2>
+          <p id="refereeSubtext" class="text-xs text-gray-400 font-mono mt-2">LUTADOR NO CHÃO...</p>
+        </div>
+
+        <!-- The Canvas -->
+        <canvas id="arenaCanvas" width="760" height="420" class="w-full h-auto aspect-[19/10] bg-[#090614] rounded-lg shadow-inner"></canvas>
+      </div>
+
+      <!-- Live Playback & Speed Controls -->
+      <div class="card-panel rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <!-- Play / Pause / Step -->
+        <div class="flex items-center gap-2">
+          <button id="playPauseBtn" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-4 py-2 rounded-lg flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition">
+            <span id="playPauseIcon">⏸</span>
+            <span id="playPauseText">PAUSAR</span>
+          </button>
+          <button id="stepBtn" class="bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 px-3 py-2 rounded-lg border border-purple-700/40 transition">
+            ⏭ STEP (1 FRAME)
+          </button>
+          <button id="restartFightBtn" class="bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 px-3 py-2 rounded-lg border border-purple-700/40 transition">
+            🔄 REINICIAR
+          </button>
+        </div>
+
+        <!-- Simulation Speed -->
+        <div class="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-purple-900/50">
+          <span class="text-gray-400 px-2 text-[11px]">VELOCIDADE:</span>
+          <button data-speed="1" class="speed-btn active bg-purple-700 text-white font-bold px-2.5 py-1 rounded transition">1x</button>
+          <button data-speed="2" class="speed-btn bg-transparent text-gray-300 hover:bg-purple-900/60 px-2.5 py-1 rounded transition">2x</button>
+          <button data-speed="5" class="speed-btn bg-transparent text-gray-300 hover:bg-purple-900/60 px-2.5 py-1 rounded transition">5x</button>
+          <button data-speed="10" class="speed-btn bg-transparent text-gray-300 hover:bg-purple-900/60 px-2.5 py-1 rounded transition">10x</button>
+        </div>
+
+        <!-- Batch Run Simulation Buttons -->
+        <div class="flex items-center gap-1.5">
+          <span class="text-gray-400 text-[11px]">LOTE RÁPIDO:</span>
+          <button id="batch10Btn" class="bg-amber-600/30 hover:bg-amber-600/60 text-amber-300 border border-amber-600/50 px-2.5 py-1.5 rounded transition font-bold">
+            ⚡ 10x
+          </button>
+          <button id="batch50Btn" class="bg-amber-600/30 hover:bg-amber-600/60 text-amber-300 border border-amber-600/50 px-2.5 py-1.5 rounded transition font-bold">
+            ⚡ 50x
+          </button>
+          <button id="batch100Btn" class="bg-amber-600/30 hover:bg-amber-600/60 text-amber-300 border border-amber-600/50 px-2.5 py-1.5 rounded transition font-bold">
+            ⚡ 100x
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Fighter Selectors, Builds, Stats & Event Feed (4 Cols) -->
+    <div class="lg:col-span-4 flex flex-col gap-3">
+
+      <!-- Fighter 1 & Fighter 2 Selection Panel -->
+      <div class="card-panel rounded-xl p-3.5 flex flex-col gap-3">
+        <h2 class="text-xs font-mono font-bold tracking-wider text-purple-300 uppercase flex items-center justify-between">
+          <span>⚙️ CONFIGURAR CONFRONTO</span>
+          <button id="randomizeMatchupBtn" class="text-[11px] text-amber-400 hover:underline">🎲 SORTEAR DUPLA</button>
+        </h2>
+
+        <!-- Fighter 1 Selector -->
+        <div class="space-y-1.5 bg-red-950/20 p-2.5 rounded-lg border border-red-900/30">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-mono text-red-400 font-bold">LUTADOR 1 (CANTO VERMELHO)</label>
+            <span id="p1TypeTag" class="text-[10px] bg-red-900/50 text-red-300 px-1.5 py-0.2 rounded font-mono">EQUILIBRADO</span>
+          </div>
+          <select id="p1CharSelect" class="w-full bg-[#0e0a1c] border border-red-800/50 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-red-500 font-mono">
+            <option value="0">🐝 Jack (O Apicultor)</option>
+            <option value="1">🐸 King Frog (Rei do Charco)</option>
+            <option value="2">🦀 Joana (A Pescadora)</option>
+            <option value="3">🍦 O Cremoso (Sorveteiro Monstruoso)</option>
+            <option value="4">🌋 Valéria (Bailarina Vulcânica)</option>
+            <option value="5">🎻 Maestra Vivaldi (Fantasma Clássica)</option>
+            <option value="6">🌵 Lady Espinha (Luchadora Cacto)</option>
+            <option value="7">🚀 Dr. Marcov (O Cosmonauta)</option>
+            <option value="8">🤖 Batalhator 2000 (Boss Final)</option>
+          </select>
+
+          <!-- Build Preset Selector P1 -->
+          <div class="grid grid-cols-2 gap-1.5 pt-1">
+            <div>
+              <span class="text-[10px] text-gray-400 block font-mono">PRESET DE BUILD:</span>
+              <select id="p1PresetSelect" class="w-full bg-[#0e0a1c] border border-purple-800/40 rounded px-1.5 py-1 text-[11px] text-gray-200 font-mono">
+                <option value="balanced">Equilibrada</option>
+                <option value="rushdown">Agressiva / Combo</option>
+                <option value="sustain">Defesa & Esquiva</option>
+                <option value="special">Habilidades Máx.</option>
+              </select>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block font-mono">PASSIVA:</span>
+              <select id="p1PassiveSelect" class="w-full bg-[#0e0a1c] border border-purple-800/40 rounded px-1.5 py-1 text-[11px] text-gray-200 font-mono">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fighter 2 Selector -->
+        <div class="space-y-1.5 bg-blue-950/20 p-2.5 rounded-lg border border-blue-900/30">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-mono text-blue-400 font-bold">LUTADOR 2 (CANTO AZUL)</label>
+            <span id="p2TypeTag" class="text-[10px] bg-blue-900/50 text-blue-300 px-1.5 py-0.2 rounded font-mono">DEFENSIVO</span>
+          </div>
+          <select id="p2CharSelect" class="w-full bg-[#0e0a1c] border border-blue-800/50 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 font-mono">
+            <option value="0">🐝 Jack (O Apicultor)</option>
+            <option value="1" selected>🐸 King Frog (Rei do Charco)</option>
+            <option value="2">🦀 Joana (A Pescadora)</option>
+            <option value="3">🍦 O Cremoso (Sorveteiro Monstruoso)</option>
+            <option value="4">🌋 Valéria (Bailarina Vulcânica)</option>
+            <option value="5">🎻 Maestra Vivaldi (Fantasma Clássica)</option>
+            <option value="6">🌵 Lady Espinha (Luchadora Cacto)</option>
+            <option value="7">🚀 Dr. Marcov (O Cosmonauta)</option>
+            <option value="8">🤖 Batalhator 2000 (Boss Final)</option>
+          </select>
+
+          <!-- Build Preset Selector P2 -->
+          <div class="grid grid-cols-2 gap-1.5 pt-1">
+            <div>
+              <span class="text-[10px] text-gray-400 block font-mono">PRESET DE BUILD:</span>
+              <select id="p2PresetSelect" class="w-full bg-[#0e0a1c] border border-purple-800/40 rounded px-1.5 py-1 text-[11px] text-gray-200 font-mono">
+                <option value="balanced">Equilibrada</option>
+                <option value="rushdown">Agressiva / Combo</option>
+                <option value="sustain" selected>Defesa & Esquiva</option>
+                <option value="special">Habilidades Máx.</option>
+              </select>
+            </div>
+            <div>
+              <span class="text-[10px] text-gray-400 block font-mono">PASSIVA:</span>
+              <select id="p2PassiveSelect" class="w-full bg-[#0e0a1c] border border-purple-800/40 rounded px-1.5 py-1 text-[11px] text-gray-200 font-mono">
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button id="applyFightersBtn" class="w-full bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white font-bold py-2 rounded-lg text-xs font-mono transition shadow-md shadow-purple-950/50">
+          APLICAR SELEÇÃO & INICIAR LUTA
+        </button>
+      </div>
+
+      <!-- Cumulative Statistics & Live Scoreboard -->
+      <div class="card-panel rounded-xl p-3.5 flex flex-col gap-2.5">
+        <div class="flex items-center justify-between border-b border-purple-900/40 pb-2">
+          <h2 class="text-xs font-mono font-bold tracking-wider text-purple-300 uppercase">
+            📊 ESTATÍSTICAS ACUMULADAS
+          </h2>
+          <button id="resetStatsBtn" class="text-[10px] text-rose-400 hover:underline font-mono">ZERAR PLACAR</button>
+        </div>
+
+        <!-- Win Rate Bar -->
+        <div class="space-y-1 font-mono text-xs">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="text-red-400 font-bold"><span id="p1Wins">0</span> Vitórias (<span id="p1WinRate">50</span>%)</span>
+            <span class="text-gray-400"><span id="drawWins">0</span> Empates</span>
+            <span class="text-blue-400 font-bold">(<span id="p2WinRate">50</span>%) <span id="p2Wins">0</span> Vitórias</span>
+          </div>
+          <div class="w-full h-3 bg-black/60 rounded-full overflow-hidden flex p-0.5 border border-purple-900/40">
+            <div id="p1WinBar" class="h-full bg-gradient-to-r from-red-600 to-rose-500 rounded-l-full transition-all duration-300 w-1/2"></div>
+            <div id="drawWinBar" class="h-full bg-gray-600 transition-all duration-300 w-0"></div>
+            <div id="p2WinBar" class="h-full bg-gradient-to-l from-blue-600 to-indigo-500 rounded-r-full transition-all duration-300 w-1/2"></div>
+          </div>
+        </div>
+
+        <!-- Comparative Metrics Grid -->
+        <div class="grid grid-cols-2 gap-2 text-[11px] font-mono mt-1">
+          <div class="bg-black/30 p-2 rounded border border-purple-900/30">
+            <span class="text-gray-400 block text-[10px]">MÉTODO VITÓRIAS P1</span>
+            <span class="text-red-300 font-bold block" id="p1Methods">0 KO / 0 TKO / 0 DEC</span>
+            <span class="text-gray-400 block text-[10px] mt-1.5">PRECISÃO (ACCURACY)</span>
+            <span class="text-red-300 font-bold" id="p1Accuracy">0.0%</span>
+            <span class="text-gray-400 block text-[10px] mt-1.5">ESQUIVAS 90° FEITAS</span>
+            <span class="text-amber-400 font-bold" id="p1DodgesCount">0</span>
+          </div>
+          <div class="bg-black/30 p-2 rounded border border-purple-900/30">
+            <span class="text-gray-400 block text-[10px]">MÉTODO VITÓRIAS P2</span>
+            <span class="text-blue-300 font-bold block" id="p2Methods">0 KO / 0 TKO / 0 DEC</span>
+            <span class="text-gray-400 block text-[10px] mt-1.5">PRECISÃO (ACCURACY)</span>
+            <span class="text-blue-300 font-bold" id="p2Accuracy">0.0%</span>
+            <span class="text-gray-400 block text-[10px] mt-1.5">ESQUIVAS 90° FEITAS</span>
+            <span class="text-amber-400 font-bold" id="p2DodgesCount">0</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[10px] font-mono text-gray-400 pt-1 border-t border-purple-900/30">
+          <span>DURAÇÃO MÉDIA: <strong id="avgFightTime" class="text-cyan-300">0.0s</strong></span>
+          <span>DANO MÉDIO P/ ROUND: <strong id="avgDamage" class="text-amber-300">0</strong></span>
+        </div>
+      </div>
+
+      <!-- Real-Time Combat Event Log Feed -->
+      <div class="card-panel rounded-xl p-3 flex flex-col gap-2 flex-1 min-h-[200px] max-h-[260px]">
+        <div class="flex items-center justify-between border-b border-purple-900/40 pb-1.5">
+          <h2 class="text-xs font-mono font-bold tracking-wider text-purple-300 uppercase flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            FEED DE COMBATE AO VIVO
+          </h2>
+          <button id="clearLogBtn" class="text-[10px] text-gray-500 hover:text-gray-300 font-mono">LIMPAR</button>
+        </div>
+        <div id="combatLogList" class="flex-1 overflow-y-auto font-mono text-[11px] space-y-1 pr-1 text-gray-300">
+          <div class="text-gray-500 text-[10px] italic">Aguardando início do combate...</div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // KO-RAMA AI ARENA • Real-time Simulation Engine & Renderer
+    // =========================================================================
+
+    const CHARACTERS = [
+      { id: 0, name: 'JACK', title: 'O APICULTOR', icon: '🐝', color: '#eab308', theme: 'amber', hp: 100, reach: 110, defChance: 0.75,
+        skills: ['Infestação', 'Melaço', 'Favo Protetor'], passives: ['Apicultor Nato', 'Pele de Mel', 'Bênção da Rainha'] },
+      { id: 1, name: 'KING FROG', title: 'REI DO CHARCO', icon: '🐸', color: '#22c55e', theme: 'emerald', hp: 115, reach: 105, defChance: 0.80,
+        skills: ['Língua Chicote', 'Pele Venenosa', 'Salto Real'], passives: ['Saltador Ágil', 'Pele Escorregadia', 'Fúria Anfíbia'] },
+      { id: 2, name: 'JOANA', title: 'A PESCADORA', icon: '🦀', color: '#06b6d4', theme: 'cyan', hp: 125, reach: 125, defChance: 0.78,
+        skills: ['Tesoura de Pinça', 'Arrastão', 'Cracas Protetoras'], passives: ['Braços Assimétricos', 'Casca Calcificada', 'Maré das Profundezas'] },
+      { id: 3, name: 'O CREMOSO', title: 'SORVETEIRO', icon: '🍦', color: '#ec4899', theme: 'pink', hp: 130, reach: 100, defChance: 0.82,
+        skills: ['Calda Quente', 'Chicote Baunilha', 'Modo Derretido'], passives: ['Amortecedor de Creme', 'Estamina Congelada', 'Vingança Doce'] },
+      { id: 4, name: 'VALÉRIA', title: 'BAILARINA VULCÂNICA', icon: '🌋', color: '#f97316', theme: 'orange', hp: 95, reach: 115, defChance: 0.85,
+        skills: ['Soco Magmático', 'Erupção', 'Escudo de Calor'], passives: ['Dança das Brasas', 'Magma Frio', 'Fúria Vulcânica'] },
+      { id: 5, name: 'VIVALDI', title: 'FANTASMA CLÁSSICA', icon: '🎻', color: '#a855f7', theme: 'purple', hp: 90, reach: 120, defChance: 0.86,
+        skills: ['Cadência Staccato', 'Allegro de Inverno', 'Quatro Estações'], passives: ['Ritmo Perfeito', 'Manto Fantasma', 'Ressonância'] },
+      { id: 6, name: 'LADY ESPINHA', title: 'LUCHADORA CACTO', icon: '🌵', color: '#84cc16', theme: 'lime', hp: 105, reach: 115, defChance: 0.80,
+        skills: ['Garra del Cacto', 'Salto Luchador', 'Véu de Espinhos'], passives: ['Espinhos de Retorno', 'Espírito Rebelde', 'Viva Caatinga'] },
+      { id: 7, name: 'DR. MARCOV', title: 'O COSMONAUTA', icon: '🚀', color: '#38bdf8', theme: 'sky', hp: 110, reach: 110, defChance: 0.82,
+        skills: ['Jato de Foguete', 'Laser Orbital', 'Barreira Plasma'], passives: ['Gravidade Zero', 'Carga de Propulsor', 'Traje de Titânio'] },
+      { id: 8, name: 'BATALHATOR 2000', title: 'BOSS FINAL MECHA', icon: '🤖', color: '#ef4444', theme: 'red', hp: 160, reach: 130, defChance: 0.88,
+        skills: ['Serras Duplas', 'Mísseis Teleguiados', 'Pulso EMP'], passives: ['Blindagem de Titânio', 'Dínamo Nuclear', 'Matriz Quântica'] }
+    ];
+
+    // Web Audio Synthesizer (Zero External Dependencies)
+    class RetroSoundSynth {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+      }
+      playPunch(isHeavy) {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = isHeavy ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(isHeavy ? 140 : 220, now);
+        osc.frequency.exponentialRampToValueAtTime(30, now + (isHeavy ? 0.16 : 0.08));
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (isHeavy ? 0.16 : 0.08));
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + (isHeavy ? 0.16 : 0.08));
+      }
+      playDodge() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(450, now);
+        osc.frequency.exponentialRampToValueAtTime(150, now + 0.12);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      }
+      playParry() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(440, now + 0.25);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      }
+      playBell() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [800, 1200, 1600].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.2 / (idx + 1), now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.9);
+        });
+      }
+      playKnockdown() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(110, now);
+        osc.frequency.exponentialRampToValueAtTime(25, now + 0.6);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.6);
+      }
+    }
+    const audioSynth = new RetroSoundSynth();
+
+    // =========================================================================
+    // COMBAT SIMULATION CORE (Exact Rules matching C++ Engine)
+    // =========================================================================
+
+    class FighterSim {
+      constructor(charDef, isPlayerSlot, preset = 'balanced', passive = '') {
+        this.charId = charDef.id;
+        this.name = charDef.name;
+        this.title = charDef.title;
+        this.icon = charDef.icon;
+        this.color = charDef.color;
+        this.isPlayerSlot = isPlayerSlot; // Slot 1 (Red) or Slot 2 (Blue)
+        this.maxHp = charDef.hp;
+        this.hp = this.maxHp;
+        this.lagHp = this.maxHp;
+        this.maxStamina = 100;
+        this.stamina = 100;
+        this.reach = charDef.reach;
+        this.defChance = charDef.defChance;
+        this.preset = preset;
+        this.passive = passive || charDef.passives[0];
+        
+        // Combat state
+        this.state = 'IDLE'; // IDLE, TELEGRAPH, PUNCH, BLOCK, PARRY, DODGE_L, DODGE_R, DODGE_B, HIT, KNOCKDOWN
+        this.actionTimer = 0;
+        this.actionMax = 0;
+        this.actionCooldown = 15;
+        this.vulnerable = 0; // Brecha frames
+        this.staminaRegenDelay = 0;
+        this.isExhausted = false;
+        this.isSluggish = false;
+        this.knockdowns = 0;
+        this.activePunchType = 'JAB';
+        this.isHeavyPunch = false;
+        this.skillCooldown = 180 + Math.floor(Math.random() * 120);
+        this.selectedSkill = charDef.skills[0];
+
+        // 3D Motion in Ring
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.bodySkew = 0;
+        this.swing = 0;
+        this.hop = 0;
+
+        // Statistics
+        this.stats = {
+          punchesThrown: 0,
+          punchesLanded: 0,
+          dodges: 0,
+          parries: 0,
+          blocks: 0,
+          skillsCast: 0,
+          damageDealt: 0
+        };
+      }
+
+      reset(cleanStats = false) {
+        this.hp = this.maxHp;
+        this.lagHp = this.maxHp;
+        this.stamina = 100;
+        this.state = 'IDLE';
+        this.actionTimer = 0;
+        this.actionMax = 0;
+        this.vulnerable = 0;
+        this.staminaRegenDelay = 0;
+        this.isExhausted = false;
+        this.isSluggish = false;
+        this.knockdowns = 0;
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.bodySkew = 0;
+        if (cleanStats) {
+          this.stats = { punchesThrown: 0, punchesLanded: 0, dodges: 0, parries: 0, blocks: 0, skillsCast: 0, damageDealt: 0 };
+        }
+      }
+
+      startMove(state, duration) {
+        this.state = state;
+        this.actionTimer = duration;
+        this.actionMax = duration;
+      }
+    }
+
+    class ArenaEngine {
+      constructor() {
+        this.f1 = new FighterSim(CHARACTERS[0], true);
+        this.f2 = new FighterSim(CHARACTERS[1], false);
+        this.ringAngle = 0.0;
+        this.targetRingAngle = 0.0;
+        this.round = 1;
+        this.roundFrames = 3 * 60 * 60; // 3 min a 60 fps (10800 frames)
+        this.frameIndex = 0;
+        this.isPaused = true;
+        this.simSpeed = 1;
+        this.matchOver = false;
+        this.refereeCount = 0;
+        this.refereeTimer = 0;
+        this.whoIsDown = null;
+
+        // Particle System
+        this.particles = [];
+        this.floatingTexts = [];
+
+        // Global Record / Analytics
+        this.records = {
+          totalMatches: 0,
+          f1Wins: 0,
+          f2Wins: 0,
+          draws: 0,
+          f1KOs: 0,
+          f1TKOs: 0,
+          f1Decisions: 0,
+          f2KOs: 0,
+          f2TKOs: 0,
+          f2Decisions: 0,
+          totalDurationFrames: 0,
+          totalDamage: 0
+        };
+      }
+
+      initMatch() {
+        this.f1.reset();
+        this.f2.reset();
+        this.ringAngle = 0.0;
+        this.targetRingAngle = 0.0;
+        this.round = 1;
+        this.roundFrames = 3 * 60 * 60;
+        this.frameIndex = 0;
+        this.matchOver = false;
+        this.refereeCount = 0;
+        this.refereeTimer = 0;
+        this.whoIsDown = null;
+        this.particles = [];
+        this.floatingTexts = [];
+        addCombatLog(`🔔 Round 1 começou! ${this.f1.name} vs ${this.f2.name}`, 'text-amber-300 font-bold');
+        audioSynth.playBell();
+        updateUI();
+      }
+
+      // Step 1 Frame of Combat Simulation
+      tick() {
+        if (this.matchOver) return;
+
+        this.frameIndex++;
+        if (this.roundFrames > 0) this.roundFrames--;
+
+        // Smooth ring angle interpolation
+        this.ringAngle += (this.targetRingAngle - this.ringAngle) * 0.15;
+        // Slow ambient ring rotation
+        this.targetRingAngle -= 0.0006;
+
+        // Handle Referee Count if a fighter is down
+        if (this.whoIsDown) {
+          this.handleRefereeCount();
+          this.updateParticles();
+          return;
+        }
+
+        // Stamina natural regeneration
+        this.regenStamina(this.f1);
+        this.regenStamina(this.f2);
+
+        // Update active action timers & animations
+        this.updateFighterPhysics(this.f1);
+        this.updateFighterPhysics(this.f2);
+
+        // AI Decisions for F1 and F2
+        this.updateAI(this.f1, this.f2);
+        this.updateAI(this.f2, this.f1);
+
+        // Check Round Bell Timeout
+        if (this.roundFrames <= 0) {
+          this.endMatchByDecision();
+        }
+
+        // Update visual FX & floating texts
+        this.updateParticles();
+      }
+
+      regenStamina(f) {
+        if (f.staminaRegenDelay > 0) {
+          f.staminaRegenDelay--;
+        } else {
+          f.stamina = Math.min(f.maxStamina, f.stamina + 0.35);
+          if (f.stamina > 30) f.isExhausted = false;
+        }
+      }
+
+      updateFighterPhysics(f) {
+        if (f.vulnerable > 0) f.vulnerable--;
+
+        if (f.actionTimer > 0) {
+          f.actionTimer--;
+          const prog = 1.0 - (f.actionTimer / f.actionMax);
+          const swing = Math.sin(prog * Math.PI);
+
+          // Dodge Physics with 90° Ring Rotation and Jump
+          if (f.state === 'DODGE_L' || f.state === 'DODGE_R') {
+            const dir = (f.state === 'DODGE_L') ? -1.0 : 1.0;
+            const turnDir = (f.state === 'DODGE_L') ? 1.0 : -1.0;
+            f.offsetX = dir * 48.0 * swing;
+            f.offsetY = 18.0 * swing;
+            f.bodySkew = -dir * 0.28 * swing;
+
+            // Rotate ringQuadrant on dodge
+            const prevProg = 1.0 - ((f.actionTimer + 1) / f.actionMax);
+            const stepFrac = (prog * prog * (3 - 2 * prog)) - (prevProg * prevProg * (3 - 2 * prevProg));
+            this.targetRingAngle += turnDir * (Math.PI * 0.5) * stepFrac;
+
+            // Spawn dust on dodge start
+            if (prog < 0.25 && !f.spawnedSmoke) {
+              f.spawnedSmoke = true;
+              this.spawnPuff(f.isPlayerSlot ? -80 : 80, 0, '#ffffff', 8);
+            }
+          } else if (f.state === 'PUNCH') {
+            const dir = f.isPlayerSlot ? 1 : -1;
+            f.offsetX = (f.activePunchType === 'HOOK' ? dir * 18 : 0) * swing;
+            f.bodySkew = (f.isHeavyPunch ? dir * 0.22 : dir * 0.1) * swing;
+          } else if (f.state === 'BLOCK') {
+            f.bodySkew = 0;
+            f.offsetY = -4;
+          }
+        } else {
+          // Action ended, return to idle
+          if (f.state !== 'IDLE' && f.state !== 'KNOCKDOWN') {
+            f.state = 'IDLE';
+            f.offsetX = 0;
+            f.offsetY = 0;
+            f.bodySkew = 0;
+            f.spawnedSmoke = false;
+          }
+        }
+      }
+
+      updateAI(actor, rival) {
+        if (actor.state !== 'IDLE') return;
+
+        // Skill cooldown
+        if (actor.skillCooldown > 0) actor.skillCooldown--;
+        if (actor.actionCooldown > 0) {
+          actor.actionCooldown--;
+          return;
+        }
+
+        // 1. Reactive Defense against incoming rival punch
+        if (rival.state === 'TELEGRAPH' || rival.state === 'PUNCH') {
+          if (Math.random() < actor.defChance && actor.vulnerable <= 0) {
+            const roll = Math.random();
+            if (roll < 0.35) {
+              // Perfect Parry / Block
+              if (roll < 0.12 && actor.stamina >= 10) {
+                actor.startMove('PARRY', 14);
+                actor.stats.parries++;
+                addCombatLog(`⚡ ${actor.name} armou PARRY contra ${rival.name}!`, 'text-cyan-300 font-bold');
+                audioSynth.playParry();
+                this.spawnFloatingText("PARRY!", '#06b6d4', actor.isPlayerSlot ? -100 : 100, -70);
+              } else {
+                actor.startMove('BLOCK', 18);
+                actor.stats.blocks++;
+              }
+              return;
+            } else if (roll < 0.85 && actor.stamina >= 8) {
+              // 90° Ring Dodge!
+              const dodgeLeft = Math.random() > 0.5;
+              const dodgeState = dodgeLeft ? 'DODGE_L' : 'DODGE_R';
+              actor.stamina -= (actor.preset === 'sustain' ? 4 : 8);
+              actor.startMove(dodgeState, 22);
+              actor.stats.dodges++;
+              audioSynth.playDodge();
+              addCombatLog(`🌀 ${actor.name} executou Esquiva no Ringue (90°)!`, 'text-amber-300');
+              this.spawnFloatingText("ESQUIVA 90°", '#eab308', actor.isPlayerSlot ? -80 : 80, -60);
+              return;
+            }
+          }
+        }
+
+        // 2. Offense: Cast Special Skill or Start Punch
+        if (actor.skillCooldown <= 0 && Math.random() < 0.45 && actor.stamina >= 25) {
+          this.triggerSkill(actor, rival);
+          return;
+        }
+
+        // 3. Regular Attacks: Jab, Cross, Hook, Uppercut
+        const punches = [
+          { type: 'JAB', heavy: false, windup: 12, dur: 18, cost: 12, dmg: 7 },
+          { type: 'CROSS', heavy: false, windup: 16, dur: 22, cost: 16, dmg: 10 },
+          { type: 'HOOK', heavy: true, windup: 22, dur: 26, cost: 22, dmg: 15 },
+          { type: 'UPPER', heavy: true, windup: 26, dur: 30, cost: 28, dmg: 19 }
+        ];
+
+        // Preference based on build
+        let choice = punches[Math.floor(Math.random() * punches.length)];
+        if (actor.preset === 'rushdown') choice = Math.random() < 0.6 ? punches[0] : punches[1];
+        if (rival.vulnerable > 0) choice = punches[3]; // Punish with Uppercut!
+
+        if (actor.stamina < choice.cost) {
+          actor.isExhausted = true;
+          actor.isSluggish = true;
+        }
+
+        actor.activePunchType = choice.type;
+        actor.isHeavyPunch = choice.heavy;
+        actor.stamina = Math.max(0, actor.stamina - choice.cost);
+        actor.staminaRegenDelay = 20;
+        actor.stats.punchesThrown++;
+
+        // Start Telegraph Wind-up
+        actor.startMove('TELEGRAPH', choice.windup);
+        // Queue attack execution at end of wind-up
+        setTimeout(() => {
+          if (actor.state === 'TELEGRAPH') {
+            actor.startMove('PUNCH', choice.dur);
+            this.resolveAttackHit(actor, rival, choice);
+          }
+        }, (choice.windup * 16) / this.simSpeed);
+      }
+
+      triggerSkill(actor, rival) {
+        actor.skillCooldown = 260 + Math.floor(Math.random() * 140);
+        actor.stamina -= 25;
+        actor.stats.skillsCast++;
+        const skillName = actor.selectedSkill;
+        addCombatLog(`✨ ${actor.name} lançou ESPECIAL: [${skillName}]!`, 'text-purple-400 font-bold');
+        this.spawnFloatingText(skillName.toUpperCase() + "!", '#c084fc', actor.isPlayerSlot ? -90 : 90, -85);
+
+        // Immediate or delayed skill effect
+        const dmg = 22 + Math.floor(Math.random() * 8);
+        this.applyDamage(rival, dmg, actor, true);
+        this.spawnPuff(rival.isPlayerSlot ? -90 : 90, -40, '#a855f7', 16);
+      }
+
+      resolveAttackHit(attacker, defender, punch) {
+        // Did defender dodge?
+        if (defender.state === 'DODGE_L' || defender.state === 'DODGE_R') {
+          // Missed! Attacker enters Brecha (Vulnerable window)
+          attacker.vulnerable = 26;
+          addCombatLog(`💨 ${defender.name} desviou do golpe de ${attacker.name}! BRECHA aberta!`, 'text-cyan-400');
+          this.spawnFloatingText("BRECHA!", '#00f0ff', attacker.isPlayerSlot ? -80 : 80, -80);
+          return;
+        }
+
+        // Did defender Parry?
+        if (defender.state === 'PARRY') {
+          attacker.vulnerable = 34;
+          attacker.stamina = Math.max(0, attacker.stamina - 15);
+          this.spawnPuff(defender.isPlayerSlot ? -80 : 80, -30, '#06b6d4', 20);
+          this.spawnFloatingText("PARRY PERFEITO!", '#06b6d4', defender.isPlayerSlot ? -80 : 80, -70);
+          addCombatLog(`⚡ PARRY PERFEITO de ${defender.name}! ${attacker.name} totalmente vulnerável!`, 'text-cyan-300 font-bold');
+          return;
+        }
+
+        // Did defender Block?
+        const isBlocked = (defender.state === 'BLOCK');
+        let dmg = punch.dmg;
+        if (attacker.isSluggish) dmg *= 0.35; // Sluggish punch penalty
+        if (defender.vulnerable > 0) dmg *= 1.6; // Counter-hit on breach!
+
+        if (isBlocked) {
+          dmg *= 0.25; // Block chip damage
+          defender.stamina = Math.max(0, defender.stamina - 8);
+          this.spawnPuff(defender.isPlayerSlot ? -80 : 80, -40, '#3b82f6', 10);
+          this.spawnFloatingText("DEFENDEU", '#60a5fa', defender.isPlayerSlot ? -80 : 80, -50);
+        } else {
+          attacker.stats.punchesLanded++;
+          this.spawnPuff(defender.isPlayerSlot ? -80 : 80, -40, '#ef4444', 14);
+          const isCrit = (defender.vulnerable > 0);
+          this.spawnFloatingText(`-${Math.round(dmg)}${isCrit ? ' CRÍTICO!' : ''}`, isCrit ? '#facc15' : '#ef4444', defender.isPlayerSlot ? -80 : 80, -60);
+          audioSynth.playPunch(punch.heavy);
+        }
+
+        this.applyDamage(defender, dmg, attacker, false);
+      }
+
+      applyDamage(target, dmg, attacker, isSkill) {
+        target.hp = Math.max(0, target.hp - dmg);
+        attacker.stats.damageDealt += dmg;
+        this.records.totalDamage += dmg;
+        target.state = 'HIT';
+        target.actionTimer = 10;
+        target.actionMax = 10;
+
+        if (target.hp <= 0) {
+          this.triggerKnockdown(target, attacker);
+        }
+      }
+
+      triggerKnockdown(downFighter, hitter) {
+        downFighter.knockdowns++;
+        downFighter.state = 'KNOCKDOWN';
+        this.whoIsDown = downFighter;
+        this.refereeCount = 0;
+        this.refereeTimer = 0;
+
+        audioSynth.playKnockdown();
+        addCombatLog(`💥 KNOCKDOWN! ${downFighter.name} foi à lona! (${downFighter.knockdowns}/3 KDs)`, 'text-rose-400 font-bold');
+
+        // Check 3 Knockdowns = TKO!
+        if (downFighter.knockdowns >= 3) {
+          this.endMatch(hitter, 'TKO');
+          return;
+        }
+
+        // Show Referee Overlay
+        document.getElementById('refereeOverlay').classList.remove('hidden');
+      }
+
+      handleRefereeCount() {
+        this.refereeTimer++;
+        if (this.refereeTimer % 55 === 0) {
+          this.refereeCount++;
+          document.getElementById('refereeCountText').innerText = this.refereeCount;
+          audioSynth.playPunch(false);
+
+          // Can fighter get up? (Stamina and HP check)
+          const recoveryChance = 0.85 - (this.whoIsDown.knockdowns * 0.25);
+          if (this.refereeCount >= 3 && Math.random() < recoveryChance) {
+            // Fighter gets up!
+            this.whoIsDown.hp = Math.min(this.whoIsDown.maxHp, 35 + (3 - this.whoIsDown.knockdowns) * 15);
+            this.whoIsDown.lagHp = this.whoIsDown.hp;
+            this.whoIsDown.stamina = 60;
+            this.whoIsDown.state = 'IDLE';
+            addCombatLog(`🆙 ${this.whoIsDown.name} levantou na contagem de ${this.refereeCount}!`, 'text-emerald-400');
+            document.getElementById('refereeOverlay').classList.add('hidden');
+            this.whoIsDown = null;
+            return;
+          }
+
+          if (this.refereeCount >= 10) {
+            // Knockout!
+            const winner = (this.whoIsDown === this.f1) ? this.f2 : this.f1;
+            this.endMatch(winner, 'KO');
+          }
+        }
+      }
+
+      endMatch(winner, method) {
+        this.matchOver = true;
+        this.records.totalMatches++;
+        this.records.totalDurationFrames += this.frameIndex;
+        document.getElementById('refereeOverlay').classList.add('hidden');
+
+        if (winner === this.f1) {
+          this.records.f1Wins++;
+          if (method === 'KO') this.records.f1KOs++;
+          else if (method === 'TKO') this.records.f1TKOs++;
+          else this.records.f1Decisions++;
+        } else {
+          this.records.f2Wins++;
+          if (method === 'KO') this.records.f2KOs++;
+          else if (method === 'TKO') this.records.f2TKOs++;
+          else this.records.f2Decisions++;
+        }
+
+        const isPerfect = winner && (winner.hp >= winner.maxHp);
+        if (isPerfect) {
+          addCombatLog(`⭐ PERFEITO! ${winner.name} VENCEU SEM LEVAR DANO! (+1500 XP DE COMBATE)`, 'text-cyan-300 font-black text-sm bg-cyan-950/60 p-1.5 rounded border border-cyan-400/40 shadow-lg');
+          this.spawnFloatingText("PERFEITO!", '#00f0ff', winner.isPlayerSlot ? -90 : 90, -110);
+        } else {
+          addCombatLog(`🏆 VITÓRIA DE ${winner.name} POR ${method}! (+500 XP DE COMBATE)`, 'text-amber-400 font-black text-sm');
+        }
+        audioSynth.playBell();
+        updateUI();
+
+        // Auto restart next fight after 3s if not paused
+        if (!this.isPaused) {
+          setTimeout(() => {
+            if (!this.isPaused) this.initMatch();
+          }, 3000 / this.simSpeed);
+        }
+      }
+
+      endMatchByDecision() {
+        this.matchOver = true;
+        this.records.totalMatches++;
+        this.records.totalDurationFrames += this.frameIndex;
+
+        let winner = null;
+        if (this.f1.hp > this.f2.hp) winner = this.f1;
+        else if (this.f2.hp > this.f1.hp) winner = this.f2;
+
+        if (winner) {
+          if (winner === this.f1) {
+            this.records.f1Wins++;
+            this.records.f1Decisions++;
+          } else {
+            this.records.f2Wins++;
+            this.records.f2Decisions++;
+          }
+          const isPerfect = (winner.hp >= winner.maxHp);
+          if (isPerfect) {
+            addCombatLog(`⭐ PERFEITO! ${winner.name} venceu por Decisão sem sofrer dano! (+1500 XP DE COMBATE)`, 'text-cyan-300 font-black text-sm bg-cyan-950/60 p-1.5 rounded border border-cyan-400/40');
+            this.spawnFloatingText("PERFEITO!", '#00f0ff', winner.isPlayerSlot ? -90 : 90, -110);
+          } else {
+            addCombatLog(`⚖️ FIM DE TEMPO! Vitória de ${winner.name} por Decisão Unânime! (+500 XP DE COMBATE)`, 'text-amber-400 font-bold');
+          }
+        } else {
+          this.records.draws++;
+          addCombatLog(`⚖️ FIM DE TEMPO! Empate Técnico! (+100 XP)`, 'text-gray-400 font-bold');
+        }
+        audioSynth.playBell();
+        updateUI();
+      }
+
+      // Fast Batch Run (Headless Loop)
+      runBatch(count) {
+        const wasPaused = this.isPaused;
+        this.isPaused = true;
+
+        for (let m = 0; m < count; m++) {
+          this.initMatch();
+          let safetyLimit = 15000;
+          while (!this.matchOver && safetyLimit-- > 0) {
+            this.tick();
+          }
+        }
+
+        addCombatLog(`⚡ LOTE CONCLUÍDO: ${count} partidas simuladas instantaneamente!`, 'text-emerald-400 font-bold');
+        this.isPaused = wasPaused;
+        updateUI();
+      }
+
+      spawnPuff(x, y, color, count = 10) {
+        for (let i = 0; i < count; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const spd = 1.0 + Math.random() * 3.5;
+          this.particles.push({
+            x, y,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd - 1.0,
+            life: 25 + Math.floor(Math.random() * 15),
+            maxLife: 40,
+            color,
+            size: 2.5 + Math.random() * 4.0
+          });
+        }
+      }
+
+      spawnFloatingText(text, color, x, y) {
+        this.floatingTexts.push({
+          text, color, x, y,
+          vy: -1.2,
+          alpha: 1.0,
+          life: 45
+        });
+      }
+
+      updateParticles() {
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life--;
+          if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+          const t = this.floatingTexts[i];
+          t.y += t.vy;
+          t.alpha = t.life / 45;
+          t.life--;
+          if (t.life <= 0) this.floatingTexts.splice(i, 1);
+        }
+      }
+    }
+
+    const sim = new ArenaEngine();
+
+    // =========================================================================
+    // CANVAS 2D PSEUDO-3D ARENA RENDERER (90° Rotation & Isometric Depth)
+    // =========================================================================
+
+    const canvas = document.getElementById('arenaCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function renderRing() {
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      // Deep Ring Atmosphere Background
+      const bgGrad = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W / 1.5);
+      bgGrad.addColorStop(0, '#15102a');
+      bgGrad.addColorStop(0.6, '#0b0716');
+      bgGrad.addColorStop(1, '#05030a');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Stage Spotlight cone
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(W / 2, H / 2 + 30, W * 0.45, H * 0.35, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.fill();
+      ctx.restore();
+
+      // Ring Geometry with Dynamic Ring Angle Rotation
+      ctx.save();
+      ctx.translate(W / 2, H / 2 + 25);
+
+      const angle = sim.ringAngle;
+      const ringHalf = 170; // Half-size of the square ring mat
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+
+      // 3D Corner Projection helper
+      const projectCorner = (lx, lz) => {
+        // Rotate in X-Z plane
+        const rx = lx * cosA - lz * sinA;
+        const rz = lx * sinA + lz * cosA;
+        // Isometric perspective squash
+        const px = rx * 1.55;
+        const py = rz * 0.65;
+        return { x: px, y: py, depth: rz };
+      };
+
+      const c0 = projectCorner(-ringHalf, -ringHalf);
+      const c1 = projectCorner(ringHalf, -ringHalf);
+      const c2 = projectCorner(ringHalf, ringHalf);
+      const c3 = projectCorner(-ringHalf, ringHalf);
+
+      // Ring Canvas Floor
+      ctx.beginPath();
+      ctx.moveTo(c0.x, c0.y);
+      ctx.lineTo(c1.x, c1.y);
+      ctx.lineTo(c2.x, c2.y);
+      ctx.lineTo(c3.x, c3.y);
+      ctx.closePath();
+      ctx.fillStyle = '#1e1838';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#3d306b';
+      ctx.stroke();
+
+      // Ring Mat Center Logo
+      ctx.save();
+      ctx.font = 'bold 22px "Chakra Petch", sans-serif';
+      ctx.fillStyle = 'rgba(234, 179, 8, 0.15)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('KO-RAMA', 0, 0);
+      ctx.restore();
+
+      // Grid Lines on Mat
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      for (let g = -ringHalf + 60; g < ringHalf; g += 60) {
+        const pA = projectCorner(g, -ringHalf);
+        const pB = projectCorner(g, ringHalf);
+        ctx.beginPath();
+        ctx.moveTo(pA.x, pA.y);
+        ctx.lineTo(pB.x, pB.y);
+        ctx.stroke();
+      }
+
+      // 3-Tier Ring Ropes
+      const ropeHeights = [-20, -40, -60];
+      ropeHeights.forEach((rh, idx) => {
+        ctx.beginPath();
+        ctx.moveTo(c0.x, c0.y + rh);
+        ctx.lineTo(c1.x, c1.y + rh);
+        ctx.lineTo(c2.x, c2.y + rh);
+        ctx.lineTo(c3.x, c3.y + rh);
+        ctx.closePath();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = idx === 0 ? 'rgba(239, 68, 68, 0.8)' : (idx === 1 ? 'rgba(255, 255, 255, 0.8)' : 'rgba(59, 130, 246, 0.8)');
+        ctx.stroke();
+      });
+
+      // 4 Corner Turnbuckle Posts
+      [c0, c1, c2, c3].forEach((c, idx) => {
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        ctx.lineTo(c.x, c.y - 70);
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = (idx === 0 || idx === 3) ? '#ef4444' : '#3b82f6';
+        ctx.stroke();
+      });
+
+      // Render Fighters
+      // Sort by perspective depth so the front fighter draws over the back fighter
+      const f1Depth = (sim.f1.isPlayerSlot ? 1 : -1);
+      drawFighter(sim.f1, -110 + sim.f1.offsetX, sim.f1.offsetY, true);
+      drawFighter(sim.f2, 110 + sim.f2.offsetX, sim.f2.offsetY, false);
+
+      // Render Particles
+      sim.particles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      });
+
+      // Render Floating Combat Texts
+      sim.floatingTexts.forEach(t => {
+        ctx.save();
+        ctx.font = 'bold 14px "JetBrains Mono", monospace';
+        ctx.fillStyle = t.color;
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = t.alpha;
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 6;
+        ctx.fillText(t.text, t.x, t.y);
+        ctx.restore();
+      });
+
+      ctx.restore();
+    }
+
+    function drawFighter(f, baseX, baseY, isLeftSlot) {
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.rotate(f.bodySkew);
+
+      // Shadow on Ring Floor
+      ctx.beginPath();
+      ctx.ellipse(0, 15, 32, 10, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.fill();
+
+      // Fighter Torso
+      ctx.beginPath();
+      ctx.roundRect(-22, -60, 44, 52, 10);
+      ctx.fillStyle = f.color;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#05030a';
+      ctx.stroke();
+
+      // Fighter Head
+      ctx.beginPath();
+      ctx.arc(0, -78, 18, 0, Math.PI * 2);
+      ctx.fillStyle = f.color;
+      ctx.fill();
+      ctx.stroke();
+
+      // Eyes / Expression
+      ctx.fillStyle = '#05030a';
+      if (f.state === 'HIT' || f.state === 'KNOCKDOWN') {
+        // XX Eyes on Knockdown/Hit
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('✖ ✖', 0, -74);
+      } else {
+        const eyeOff = isLeftSlot ? 4 : -4;
+        ctx.beginPath();
+        ctx.arc(-5 + eyeOff, -78, 3, 0, Math.PI * 2);
+        ctx.arc(5 + eyeOff, -78, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Boxing Gloves
+      const gloveColor = isLeftSlot ? '#ef4444' : '#3b82f6';
+      ctx.fillStyle = gloveColor;
+
+      let gL = { x: -28, y: -45 };
+      let gR = { x: 28, y: -45 };
+
+      if (f.state === 'PUNCH') {
+        const punchReach = isLeftSlot ? 38 : -38;
+        if (f.activePunchType === 'UPPER') {
+          gR.y -= 30;
+          gR.x += punchReach * 0.4;
+        } else {
+          gR.x += punchReach;
+        }
+      } else if (f.state === 'BLOCK' || f.state === 'PARRY') {
+        gL = { x: -12, y: -58 };
+        gR = { x: 12, y: -58 };
+        // Blue Guard Shield
+        ctx.beginPath();
+        ctx.arc(0, -58, 26, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.25)';
+        ctx.fill();
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (f.state === 'TELEGRAPH') {
+        // Wind-up pull back
+        gR.x -= isLeftSlot ? 18 : -18;
+        // Warning Telegraph Flash
+        ctx.beginPath();
+        ctx.arc(gR.x, gR.y, 14, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(234, 179, 8, 0.6)';
+        ctx.fill();
+      }
+
+      // Draw Gloves
+      [gL, gR].forEach(g => {
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, 11, 0, Math.PI * 2);
+        ctx.fillStyle = gloveColor;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#05030a';
+        ctx.stroke();
+      });
+
+      // Character Icon on Chest
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(f.icon, 0, -35);
+
+      // Vulnerable Breach Indicator
+      if (f.vulnerable > 0) {
+        ctx.beginPath();
+        ctx.ellipse(0, -30, 32, 60, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = '#00f0ff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // UI UPDATE & EVENT FEED
+    // =========================================================================
+
+    function addCombatLog(msg, colorClass = 'text-gray-300') {
+      const list = document.getElementById('combatLogList');
+      const timeSec = ((sim.frameIndex / 60)).toFixed(1);
+      const row = document.createElement('div');
+      row.className = `flex items-start gap-1.5 leading-tight ${colorClass}`;
+      row.innerHTML = `<span class="text-gray-500 font-mono text-[9px] shrink-0">[${timeSec}s]</span> <span>${msg}</span>`;
+      list.prepend(row);
+      // Cap log rows
+      if (list.children.length > 60) list.removeChild(list.lastChild);
+    }
+
+    function updateUI() {
+      // Fighters Health & Lag Bars
+      const p1HpPct = Math.max(0, (sim.f1.hp / sim.f1.maxHp) * 100);
+      const p2HpPct = Math.max(0, (sim.f2.hp / sim.f2.maxHp) * 100);
+      document.getElementById('p1HpFill').style.width = p1HpPct + '%';
+      document.getElementById('p2HpFill').style.width = p2HpPct + '%';
+      document.getElementById('p1HpLag').style.width = Math.max(0, (sim.f1.lagHp / sim.f1.maxHp) * 100) + '%';
+      document.getElementById('p2HpLag').style.width = Math.max(0, (sim.f2.lagHp / sim.f2.maxHp) * 100) + '%';
+      sim.f1.lagHp += (sim.f1.hp - sim.f1.lagHp) * 0.1;
+      sim.f2.lagHp += (sim.f2.hp - sim.f2.lagHp) * 0.1;
+
+      document.getElementById('p1HpNum').innerText = `${Math.round(sim.f1.hp)} / ${sim.f1.maxHp}`;
+      document.getElementById('p2HpNum').innerText = `${Math.round(sim.f2.hp)} / ${sim.f2.maxHp}`;
+
+      // Stamina Bars
+      document.getElementById('p1StaminaFill').style.width = sim.f1.stamina + '%';
+      document.getElementById('p2StaminaFill').style.width = sim.f2.stamina + '%';
+
+      // KD counters & states
+      document.getElementById('p1KdCount').innerText = sim.f1.knockdowns;
+      document.getElementById('p2KdCount').innerText = sim.f2.knockdowns;
+      document.getElementById('p1State').innerText = sim.f1.state;
+      document.getElementById('p2State').innerText = sim.f2.state;
+
+      // Round Timer
+      const remainingSec = Math.floor(sim.roundFrames / 60);
+      const m = Math.floor(remainingSec / 60);
+      const s = remainingSec % 60;
+      document.getElementById('roundTimer').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+      document.getElementById('roundNum').innerText = sim.round;
+
+      // Ring Angle Degrees & Quadrant Label
+      const deg = Math.round(((sim.ringAngle % (Math.PI * 2)) * 180 / Math.PI));
+      const normDeg = ((deg % 360) + 360) % 360;
+      document.getElementById('ringAngleDeg').innerText = normDeg + '°';
+      const quadLabel = (normDeg < 45 || normDeg >= 315) ? 'ARESTA NORTE' :
+                        (normDeg >= 45 && normDeg < 135) ? 'ARESTA LESTE (90°)' :
+                        (normDeg >= 135 && normDeg < 225) ? 'ARESTA SUL (180°)' : 'ARESTA OESTE (270°)';
+      document.getElementById('ringQuadrantLabel').innerText = quadLabel;
+
+      // Cumulative Stats & Win Rate
+      const total = sim.records.totalMatches;
+      document.getElementById('headerMatchCount').innerText = total;
+      document.getElementById('p1Wins').innerText = sim.records.f1Wins;
+      document.getElementById('p2Wins').innerText = sim.records.f2Wins;
+      document.getElementById('drawWins').innerText = sim.records.draws;
+
+      const p1Rate = total > 0 ? Math.round((sim.records.f1Wins / total) * 100) : 50;
+      const p2Rate = total > 0 ? Math.round((sim.records.f2Wins / total) * 100) : 50;
+      const drawRate = total > 0 ? Math.round((sim.records.draws / total) * 100) : 0;
+      document.getElementById('p1WinRate').innerText = p1Rate;
+      document.getElementById('p2WinRate').innerText = p2Rate;
+
+      document.getElementById('p1WinBar').style.width = p1Rate + '%';
+      document.getElementById('p2WinBar').style.width = p2Rate + '%';
+      document.getElementById('drawWinBar').style.width = drawRate + '%';
+
+      // Win Methods
+      document.getElementById('p1Methods').innerText = `${sim.records.f1KOs} KO / ${sim.records.f1TKOs} TKO / ${sim.records.f1Decisions} DEC`;
+      document.getElementById('p2Methods').innerText = `${sim.records.f2KOs} KO / ${sim.records.f2TKOs} TKO / ${sim.records.f2Decisions} DEC`;
+
+      // Accuracies & Dodges
+      const p1Acc = sim.f1.stats.punchesThrown > 0 ? ((sim.f1.stats.punchesLanded / sim.f1.stats.punchesThrown) * 100).toFixed(1) : '0.0';
+      const p2Acc = sim.f2.stats.punchesThrown > 0 ? ((sim.f2.stats.punchesLanded / sim.f2.stats.punchesThrown) * 100).toFixed(1) : '0.0';
+      document.getElementById('p1Accuracy').innerText = p1Acc + '%';
+      document.getElementById('p2Accuracy').innerText = p2Acc + '%';
+
+      document.getElementById('p1DodgesCount').innerText = sim.f1.stats.dodges;
+      document.getElementById('p2DodgesCount').innerText = sim.f2.stats.dodges;
+
+      const avgFrames = total > 0 ? (sim.records.totalDurationFrames / total) : 0;
+      document.getElementById('avgFightTime').innerText = (avgFrames / 60).toFixed(1) + 's';
+      const avgDmg = total > 0 ? Math.round(sim.records.totalDamage / total) : 0;
+      document.getElementById('avgDamage').innerText = avgDmg;
+    }
+
+    // Populate Passive dropdowns based on character
+    function populatePassives(pSelectId, charIndex) {
+      const select = document.getElementById(pSelectId);
+      select.innerHTML = '';
+      CHARACTERS[charIndex].passives.forEach(pas => {
+        const opt = document.createElement('option');
+        opt.value = pas;
+        opt.innerText = pas;
+        select.appendChild(opt);
+      });
+    }
+
+    populatePassives('p1PassiveSelect', 0);
+    populatePassives('p2PassiveSelect', 1);
+
+    // =========================================================================
+    // EVENT LISTENERS & CONTROLS
+    // =========================================================================
+
+    document.getElementById('playPauseBtn').addEventListener('click', () => {
+      audioSynth.init();
+      sim.isPaused = !sim.isPaused;
+      document.getElementById('playPauseIcon').innerText = sim.isPaused ? '▶' : '⏸';
+      document.getElementById('playPauseText').innerText = sim.isPaused ? 'INICIAR' : 'PAUSAR';
+    });
+
+    document.getElementById('stepBtn').addEventListener('click', () => {
+      audioSynth.init();
+      sim.isPaused = true;
+      document.getElementById('playPauseIcon').innerText = '▶';
+      document.getElementById('playPauseText').innerText = 'INICIAR';
+      sim.tick();
+      updateUI();
+    });
+
+    document.getElementById('restartFightBtn').addEventListener('click', () => {
+      audioSynth.init();
+      sim.initMatch();
+    });
+
+    // Speed Controls
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.speed-btn').forEach(b => {
+          b.classList.remove('active', 'bg-purple-700', 'text-white', 'font-bold');
+          b.classList.add('bg-transparent', 'text-gray-300');
+        });
+        e.target.classList.add('active', 'bg-purple-700', 'text-white', 'font-bold');
+        e.target.classList.remove('bg-transparent', 'text-gray-300');
+        sim.simSpeed = parseInt(e.target.getAttribute('data-speed'));
+      });
+    });
+
+    // Batch Runs
+    document.getElementById('batch10Btn').addEventListener('click', () => sim.runBatch(10));
+    document.getElementById('batch50Btn').addEventListener('click', () => sim.runBatch(50));
+    document.getElementById('batch100Btn').addEventListener('click', () => sim.runBatch(100));
+
+    // Reset stats
+    document.getElementById('resetStatsBtn').addEventListener('click', () => {
+      sim.records = {
+        totalMatches: 0, f1Wins: 0, f2Wins: 0, draws: 0,
+        f1KOs: 0, f1TKOs: 0, f1Decisions: 0,
+        f2KOs: 0, f2TKOs: 0, f2Decisions: 0,
+        totalDurationFrames: 0, totalDamage: 0
+      };
+      sim.f1.stats = { punchesThrown: 0, punchesLanded: 0, dodges: 0, parries: 0, blocks: 0, skillsCast: 0, damageDealt: 0 };
+      sim.f2.stats = { punchesThrown: 0, punchesLanded: 0, dodges: 0, parries: 0, blocks: 0, skillsCast: 0, damageDealt: 0 };
+      updateUI();
+    });
+
+    document.getElementById('clearLogBtn').addEventListener('click', () => {
+      document.getElementById('combatLogList').innerHTML = '';
+    });
+
+    // Audio toggle
+    document.getElementById('audioToggleBtn').addEventListener('click', () => {
+      audioSynth.init();
+      audioSynth.muted = !audioSynth.muted;
+      document.getElementById('audioIcon').innerText = audioSynth.muted ? '🔇' : '🔊';
+      document.getElementById('audioLabel').innerText = audioSynth.muted ? 'MUDO' : 'ÁUDIO ATIVO';
+    });
+
+    // Change character select
+    document.getElementById('p1CharSelect').addEventListener('change', (e) => {
+      populatePassives('p1PassiveSelect', parseInt(e.target.value));
+    });
+    document.getElementById('p2CharSelect').addEventListener('change', (e) => {
+      populatePassives('p2PassiveSelect', parseInt(e.target.value));
+    });
+
+    // Apply Fighters Configuration
+    document.getElementById('applyFightersBtn').addEventListener('click', () => {
+      const c1 = CHARACTERS[parseInt(document.getElementById('p1CharSelect').value)];
+      const c2 = CHARACTERS[parseInt(document.getElementById('p2CharSelect').value)];
+      const pres1 = document.getElementById('p1PresetSelect').value;
+      const pres2 = document.getElementById('p2PresetSelect').value;
+      const pas1 = document.getElementById('p1PassiveSelect').value;
+      const pas2 = document.getElementById('p2PassiveSelect').value;
+
+      sim.f1 = new FighterSim(c1, true, pres1, pas1);
+      sim.f2 = new FighterSim(c2, false, pres2, pas2);
+
+      // Update Card Labels
+      document.getElementById('p1Name').innerText = c1.name;
+      document.getElementById('p1Title').innerText = c1.title;
+      document.getElementById('p1Badge').innerText = c1.icon;
+      document.getElementById('p1BuildText').innerText = `${pas1}`;
+
+      document.getElementById('p2Name').innerText = c2.name;
+      document.getElementById('p2Title').innerText = c2.title;
+      document.getElementById('p2Badge').innerText = c2.icon;
+      document.getElementById('p2BuildText').innerText = `${pas2}`;
+
+      sim.initMatch();
+    });
+
+    // Randomize Matchup
+    document.getElementById('randomizeMatchupBtn').addEventListener('click', () => {
+      const r1 = Math.floor(Math.random() * CHARACTERS.length);
+      let r2 = Math.floor(Math.random() * CHARACTERS.length);
+      while (r2 === r1) r2 = Math.floor(Math.random() * CHARACTERS.length);
+
+      document.getElementById('p1CharSelect').value = r1;
+      document.getElementById('p2CharSelect').value = r2;
+      populatePassives('p1PassiveSelect', r1);
+      populatePassives('p2PassiveSelect', r2);
+      document.getElementById('applyFightersBtn').click();
+    });
+
+    // =========================================================================
+    // MAIN ANIMATION & SIMULATION LOOP (60 FPS)
+    // =========================================================================
+
+    function gameLoop() {
+      if (!sim.isPaused) {
+        for (let s = 0; s < sim.simSpeed; s++) {
+          sim.tick();
+        }
+        updateUI();
+      }
+      renderRing();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Start Arena
+    sim.initMatch();
+    sim.isPaused = false; // Auto start playback
+    requestAnimationFrame(gameLoop);
+
+  </script>
+</body>
+</html>

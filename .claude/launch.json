@@ -1,0 +1,44 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wiki",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "engine-cpp/docs/wiki"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "viewer3d",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "tools3d/serve.py",
+        "8766"
+      ],
+      "port": 8766
+    },
+    {
+      "name": "viewer3d-8768",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "tools3d/serve.py",
+        "8768"
+      ],
+      "port": 8768
+    },
+    {
+      "name": "export-8770",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "tools3d/export/serve.py",
+        "8770"
+      ],
+      "port": 8770
+    }
+  ]
+}

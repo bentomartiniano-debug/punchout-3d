@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K.O.-RAMA · Vinil</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d1626; color: #eee; font: 13px system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  /* barra de cima: quem ver (lutadores) e onde (arena dele, só o lutador ou qualquer arena) */
+  #bar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 12px;
+         background: #120d18e6; border-bottom: 1px solid #ffffff1a; }
+  #bar .brand { font-weight: 700; letter-spacing: .02em; color: #fc6; }
+  #bar .group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  #bar .group > span { color: #a99cc0; margin-right: 2px; }
+  #bar button.chip { border: 1px solid #ffffff26; background: #2a2136; color: #eee; border-radius: 999px; padding: 4px 11px; cursor: pointer; font: inherit; }
+  #bar button.chip:hover { background: #3a2e4a; }
+  #bar button.chip[aria-pressed="true"] { background: #fc6; color: #1d1626; border-color: #fc6; font-weight: 600; }
+  #bar select { background: #2a2136; color: #eee; border: 1px solid #ffffff26; border-radius: 6px; padding: 4px 6px; font: inherit; }
+  #bar .hint { color: #8d82a3; font-size: 12px; margin-left: auto; }
+  #hud { position: fixed; top: 58px; left: 10px; background: #0009; padding: 8px 10px; border-radius: 8px; max-height: calc(100% - 76px); overflow: auto; }
+  #hud button { margin: 2px; }
+  #hud .row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+  #hud .row > b { color: #a99cc0; font-weight: 500; min-width: 58px; }
+  #look label { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; } #look input { width: 110px; }
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="bar"></div>
+<div id="hud">Carregando…</div>
+<script>
+// Erros de módulos assíncronos antes deixavam a bancada presa em "Carregando…".
+const showLoadError = error => {
+  const hud = document.getElementById('hud');
+  const status = document.getElementById('status') || hud;
+  if (!status) return;
+  const detail = error?.message || error?.reason?.message || error?.target?.src || error?.target?.href || error?.type || String(error);
+  status.textContent = 'Erro ao abrir a bancada: ' + detail;
+  status.style.color = '#ffb7b7';
+};
+addEventListener('error', event => showLoadError(event.error || event.message || event));
+addEventListener('unhandledrejection', event => showLoadError(event.reason));
+</script>
+<script type="module">
+// Modo vinil: o motor comum (vinil/core.js) + o personagem pedido em ?p= (vinil/<nome>.js). Padrão: Valéria.
+// A barra de cima troca o lutador e a arena (?p= e ?arena= na URL; a página recarrega com a escolha).
+import { runVinil, runLineup } from './vinil/core.js';
+const CHARS = { valeria: './vinil/valeria.js', frog: './vinil/frog.js', frogmeshy: './vinil/frog_meshy.js', jack: './vinil/jack.js', jackmeshy: './vinil/jack_meshy.js', joana: './vinil/joana.js', marcov: './vinil/marcov.js', espinha: './vinil/espinha.js', vivaldi: './vinil/vivaldi.js', cremoso: './vinil/cremoso.js', batalhator: './vinil/batalhator.js' };
+// lutadores na ordem da barra, com a arena de cada um
+const FIGHTERS = [['valeria', 'Valéria', 'pernambuco'], ['joana', 'Joana', 'joana'], ['marcov', 'Dr. Marcov', 'marcov'], ['frog', 'King Frog', 'frog'], ['cremoso', 'O Cremoso', 'cremoso'],
+                  ['espinha', 'Lady Espinha', 'espinha'], ['jack', 'Jack', 'jack'], ['vivaldi', 'Vivaldi', 'vivaldi'], ['batalhator', 'Batalhator', 'batalhator']];
+const EXTRAS = [['todos', 'Todos lado a lado'], ['frogmeshy', 'King Frog (Meshy)'], ['jackmeshy', 'Jack (Meshy)']];
+const ARENAS = [['pernambuco', 'Pernambuco'], ['joana', 'Porto'], ['marcov', 'Observatório'], ['frog', 'Brejo'], ['cremoso', 'Sorveteria'], ['espinha', 'Pátio'], ['jack', 'Jardim'], ['vivaldi', 'Teatro'], ['batalhator', 'Central']];
+const LINEUP = ['valeria', 'frog', 'jack', 'joana', 'marcov', 'espinha', 'vivaldi', 'cremoso', 'batalhator'];
+
+const q = new URLSearchParams(location.search), p = q.get('p') || 'valeria', arenaQ = q.get('arena');   // arenaQ: null = a do lutador
+const own = (FIGHTERS.find(f => f[0] === p) || [])[2];
+const go = (np, na) => { const u = new URLSearchParams(); u.set('p', np); if (na) u.set('arena', na); location.search = u.toString(); };
+{
+  const bar = document.getElementById('bar'), esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const arenaVal = arenaQ ?? 'propria', canArena = p !== 'todos';
+  bar.innerHTML = `<span class="brand">K.O.-RAMA · Vinil</span>
+    <div class="group" role="group" aria-label="Lutador"><span>Lutador</span>${FIGHTERS.map(([k, l]) => `<button class="chip" data-p="${k}" aria-pressed="${k === p}">${esc(l)}</button>`).join('')}
+      <select id="extra" aria-label="Outros"><option value="">Mais…</option>${EXTRAS.map(([k, l]) => `<option value="${k}" ${k === p ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+    <div class="group"><span>Cenário</span><select id="arena" aria-label="Cenário" ${canArena ? '' : 'disabled'}>
+      <option value="propria" ${arenaVal === 'propria' ? 'selected' : ''}>${own ? 'Arena dele (' + esc(ARENAS.find(a => a[0] === own)[1]) + ')' : 'Arena dele'}</option>
+      <option value="nenhuma" ${arenaVal === 'nenhuma' ? 'selected' : ''}>Só o personagem</option>
+      <optgroup label="Outra arena">${ARENAS.map(([k, l]) => `<option value="${k}" ${arenaVal === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</optgroup></select></div>
+    <span class="hint">arraste para girar · roda para aproximar</span>`;
+  // trocar de lutador mantém a escolha de cenário (Arena dele continua sendo a dele; "só o personagem" continua)
+  const keepArena = () => arenaQ === 'nenhuma' ? 'nenhuma' : (arenaQ && arenaQ !== own ? arenaQ : null);
+  bar.querySelectorAll('[data-p]').forEach(b => b.onclick = () => go(b.dataset.p, keepArena()));
+  document.getElementById('extra').onchange = e => { if (e.target.value) go(e.target.value, keepArena()); };
+  document.getElementById('arena').onchange = e => go(p, e.target.value === 'propria' ? null : e.target.value);
+  // o painel do lutador fica logo abaixo da barra (ela quebra em mais linhas em tela estreita)
+  const fit = () => { const h = bar.getBoundingClientRect().height, hud = document.getElementById('hud'); hud.style.top = h + 8 + 'px'; hud.style.maxHeight = `calc(100% - ${h + 18}px)`; };
+  fit(); addEventListener('resize', fit);
+}
+
+if (p === 'todos') await runLineup(await Promise.all(LINEUP.map(async k => [k, await import(CHARS[k])])));
+else await runVinil((await import(CHARS[p] || CHARS.valeria)).default);
+</script>
+</body>
+</html>

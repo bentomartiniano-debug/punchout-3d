@@ -1,0 +1,40 @@
+tools/
+node_modules/
+*.log
+*.tmp
+*.bak
+*.exe
+*.npy
+*debug*.txt
+output.txt
+bench.png
+bench_*.csv
+roster_lineup_skin0.png
+
+scratch/
+
+# Builds nativas do C++
+engine-cpp/build/
+dist/
+
+# Claude local worktrees
+.claude/worktrees/
+
+# Assets pesados de midia / 3D / audio (mantidos localmente no PC)
+# O Claude no celular le codigo C++, JS, HTML, configs e documentacao Markdown
+assets3d/
+engine-cpp/assets/
+modelsheets/
+sprites_frente_skin0/
+cards/
+*.glb
+*.gltf
+*.fbx
+*.obj
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp3
+*.wav
+*.ogg

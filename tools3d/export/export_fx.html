@@ -1,0 +1,81 @@
+<!doctype html><meta charset="utf-8"><title>Exportar efeitos</title>
+<style>body{margin:0;background:#111;color:#ddd;font:12px monospace} #log{position:fixed;left:8px;bottom:8px;z-index:9;white-space:pre} #hud{display:none}</style>
+<pre id="log"></pre><div id="hud"></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+<script type="module">
+// Grava os efeitos dos especiais do vinil para o jogo 3D (engine-cpp/app3d/render/fx_clips.hpp). ?p=lutador
+// O vinil roda sem arena e com o relógio parado; cada especial é disparado e avançado a 30 quadros por segundo. Toda peça que estava
+// escondida antes e aparece durante o especial (o fxRoot de cada lutador: anéis, espinhos, estrelas, flores, raios...) vira um nó
+// fx<i> em fx_<p>.glb, e por quadro grava-se onde ela está (em relação ao lutador parado no começo) e a cor/opacidade, em fx_<p>.kfx.
+// Formato .kfx (little-endian): "KFX1", u32 especiais; por especial: u8 tamanho + id, f32 duração (s), f32 fps, u32 quadros;
+// por quadro: f32 avanço do lutador (z da raiz), u16 peças; por peça: u16 nó, 12 f32 (matriz 3x4 por colunas), 4 u8 (rgba).
+// "KFX2": com o avanço; o jogo estica para o rival só o que vai além do lutador.
+import * as THREE from 'three';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { runVinil } from '../viewer/vinil/core.js';
+const q = new URLSearchParams(location.search), key = q.get('p') || 'espinha';
+const log = t => { document.getElementById('log').textContent += t + '\n'; };
+window.onerror = (m, s, l) => { log('ERRO ' + m + ' ' + s + ':' + l); document.title = 'ERRO'; };
+addEventListener('unhandledrejection', e => { log('ERRO ' + (e.reason?.stack || e.reason)); document.title = 'ERRO'; });
+if (q.get('arena') !== 'nenhuma') { q.set('arena', 'nenhuma'); history.replaceState(null, '', '?' + q); }   // sem cenário: só o lutador e os efeitos
+// o laço do vinil fica parado: cada chamada de tick() é um quadro de 1/30 s
+let rafFn = null; window.requestAnimationFrame = f => { rafFn = f; return 1; };
+const char = (await import(`../viewer/vinil/${key}.js`)).default;
+await runVinil(char);
+const VIN = window.VIN, FPS = 30, DT = 1 / FPS;
+VIN.clock.getDelta = () => { VIN.clock.elapsedTime += DT; return DT; };
+const tick = n => { for (let i = 0; i < (n || 1); i++) rafFn?.(); };
+const effVis = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };
+tick(20);
+const meshes = []; VIN.scene.traverse(o => { if (o.isMesh && !o.userData.hull) meshes.push(o); });
+const before = new Set(meshes.filter(effVis));
+const cand = meshes.filter(m => !before.has(m));   // peças escondidas no repouso: candidatas a efeito
+const used = new Map();   // malha -> índice do nó no .glb
+const ids = (char.skills || []).map(([k]) => k);
+const chunks = [];
+const u8 = n => { const b = new Uint8Array(1); b[0] = n; chunks.push(b); };
+const u16 = n => { const b = new Uint16Array(1); b[0] = n; chunks.push(new Uint8Array(b.buffer)); };
+const u32 = n => { const b = new Uint32Array(1); b[0] = n; chunks.push(new Uint8Array(b.buffer)); };
+const f32s = a => chunks.push(new Uint8Array(new Float32Array(a).buffer));
+const str = s => { const b = new TextEncoder().encode(s); u8(b.length); chunks.push(b); };
+chunks.push(new TextEncoder().encode('KFX2')); u32(ids.length);
+const rootInv = new THREE.Matrix4(), m = new THREE.Matrix4();
+for (const id of ids) {
+  const sk = VIN.rig.skills?.[id]; if (!sk) { str(id); f32s([0, FPS]); u32(0); continue; }
+  for (let w = 0; w < 300 && VIN.anim.kind !== 'idle'; w++) tick();   // espera voltar ao repouso
+  tick(40);   // deixa o efeito anterior sumir
+  VIN.scene.updateMatrixWorld(true); rootInv.copy(VIN.root.matrixWorld).invert();
+  VIN.startSkill(id);
+  const frames = Math.ceil((sk.dur + 1.0) * FPS); str(id); f32s([sk.dur, FPS]); u32(frames);
+  let peak = 0;
+  for (let f = 0; f < frames; f++) {
+    tick(); VIN.scene.updateMatrixWorld(true);
+    m.multiplyMatrices(rootInv, VIN.root.matrixWorld); f32s([m.elements[14]]);   // quanto o lutador andou para a frente no golpe
+    const vis = cand.filter(effVis); u16(vis.length); peak = Math.max(peak, vis.length);
+    for (const o of vis) {
+      if (!used.has(o)) used.set(o, used.size);
+      u16(used.get(o)); m.multiplyMatrices(rootInv, o.matrixWorld); const e = m.elements;
+      f32s([e[0], e[1], e[2], e[4], e[5], e[6], e[8], e[9], e[10], e[12], e[13], e[14]]);
+      const mt = Array.isArray(o.material) ? o.material[0] : o.material, c = mt.color || new THREE.Color(1, 1, 1), op = mt.transparent ? (mt.opacity ?? 1) : 1;
+      const b = new Uint8Array([Math.round(Math.min(1, c.r) * 255), Math.round(Math.min(1, c.g) * 255), Math.round(Math.min(1, c.b) * 255), Math.round(Math.max(0, Math.min(1, op)) * 255)]); chunks.push(b);
+    }
+  }
+  log(`${id}: ${frames} quadros, até ${peak} peças`);
+}
+// as peças: geometria e material como o exportador dos lutadores (tools3d/export/export.html)
+const out = new THREE.Group(); out.name = 'root';
+for (const [o, i] of used) {
+  const mt = Array.isArray(o.material) ? o.material[0] : o.material, g = o.geometry.clone(); if (!g.attributes.normal) g.computeVertexNormals();
+  for (const a of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(a)) g.deleteAttribute(a);
+  const mat = new THREE.MeshStandardMaterial({ color: mt.color || 0xffffff, map: mt.map?.isTexture ? mt.map : null, vertexColors: !!mt.vertexColors && !!g.attributes.color, side: mt.side === THREE.DoubleSide || mt.side === THREE.BackSide ? THREE.DoubleSide : THREE.FrontSide, transparent: !!mt.transparent, opacity: mt.opacity ?? 1 });
+  mat.userData = { unlit: !!mt.isMeshBasicMaterial || !!mt.isShaderMaterial };
+  const hull = o.parent?.children.find(k => k.userData.hull && k.geometry === o.geometry);
+  const n = new THREE.Mesh(g, mat); n.name = 'fx' + i; n.userData = { outlineW: hull?.userData.outlineW ?? 0 }; out.add(n);
+}
+out.userData = { fx: { skills: ids, count: used.size } };
+const glb = await new GLTFExporter().parseAsync(out, { binary: true });
+const kfx = new Blob(chunks);
+const r1 = await fetch(`/fx_${key}.glb`, { method: 'PUT', body: glb }), r2 = await fetch(`/fx_${key}.kfx`, { method: 'PUT', body: kfx });
+log(`fx_${key}: ${used.size} peças, glb ${(glb.byteLength / 1024).toFixed(0)} KB, kfx ${(kfx.size / 1024).toFixed(0)} KB (${r1.status} ${r2.status})`);
+document.title = r1.ok && r2.ok ? 'OK' : 'ERRO';
+</script>

@@ -1,0 +1,125 @@
+<!doctype html><meta charset="utf-8"><title>Exportar arena</title><pre id="log"></pre>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+<script type="module">
+// Exporta uma arena do vinil para o jogo 3D (?a=nome): tudo vira malhas unidas por material (poucas chamadas de desenho). As cordas ficam
+// de fora, porque o jogo as desenha cedendo; alturas e cores delas vão nas extras, junto com o clima da arena (userData.look).
+// Padrões feitos em shader (telhas, calçamento) saem como cor lisa.
+import * as THREE from 'three';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+const key = new URLSearchParams(location.search).get('a') || 'pernambuco';
+const log = t => { document.getElementById('log').textContent += t + '\n'; };
+window.onerror = (m, s, l) => { log('ERRO ' + m + ' ' + s + ':' + l); document.title = 'ERRO'; };
+addEventListener('unhandledrejection', e => { log('ERRO ' + (e.reason?.stack || e.reason)); document.title = 'ERRO'; });
+const V = '../viewer/vinil/';
+const BUILD = {
+  pernambuco: async () => [(await import(V + 'arena_pernambuco.js')).buildPernambucoRing(), (await import(V + 'arena_pernambuco_props.js')).buildPernambucoProps(), (await import(V + 'arena_pernambuco_bg.js')).buildPernambucoBackground()],
+  joana: async () => [await (await import(V + 'arena_joana.js')).buildJoanaArena()], marcov: async () => [await (await import(V + 'arena_marcov.js')).buildMarcovArena()],
+  vivaldi: async () => [await (await import(V + 'arena_vivaldi.js')).buildVivaldiArena()], frog: async () => [await (await import(V + 'arena_frog.js')).buildFrogArena()],
+  cremoso: async () => [await (await import(V + 'arena_cremoso.js')).buildCremosoArena()], espinha: async () => [await (await import(V + 'arena_espinha.js')).buildEspinhaArena()],
+  jack: async () => [await (await import(V + 'arena_jack.js')).buildJackArena()], batalhator: async () => [await (await import(V + 'arena_batalhator.js')).buildBatalhatorArena()],
+};
+window.__ropeInfo = [];   // arenas que unem as peças ao construir avisam das cordas por aqui, em vez de criá-las
+const objs = await BUILD[key](), scene = new THREE.Scene(); scene.add(...objs); scene.updateMatrixWorld(true);
+const look = Object.assign({ tint: [0.9, 0.84, 1.1], horizon: '#f6ead2', zenith: '#2f8ee0', fog: [40, 150] }, objs[0].userData.look);
+const buckets = new Map(), ropes = new Map(); let seen = 0;
+// cor que só existe no shader: renderiza a peça dos seis lados com o material real, sem luz, e cada vértice pega a cor da vista para onde ele olha
+const noop = THREE.Material.prototype.onBeforeCompile, gl = new THREE.WebGLRenderer({ alpha: true, preserveDrawingBuffer: true, premultipliedAlpha: false }); gl.outputColorSpace = THREE.SRGBColorSpace; gl.setSize(256, 256, false); gl.setClearColor(0, 0);
+const bakeScene = new THREE.Scene(); bakeScene.add(new THREE.AmbientLight(0xffffff, Math.PI));
+const AXES = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].map(a => new THREE.Vector3(...a)), bakeCache = new Map();
+let totalMissing = 0;
+const bakeColors = (geo0, mt) => {
+  const key = geo0.uuid + mt.uuid; if (bakeCache.has(key)) return bakeCache.get(key);
+  const geo = geo0.index ? geo0.toNonIndexed() : geo0.clone(); if (!geo.attributes.normal) geo.computeVertexNormals();
+  geo.computeBoundingBox(); const box = geo.boundingBox, c = box.getCenter(new THREE.Vector3()), R = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3);
+  const m = new THREE.Mesh(geo, mt); m.frustumCulled = false; bakeScene.add(m); const views = [], cv = document.createElement('canvas'); cv.width = cv.height = 256; const x2 = cv.getContext('2d', { willReadFrequently: true });
+  for (const a of AXES) { const cam = new THREE.OrthographicCamera(-R, R, R, -R, 0.01, R * 4); cam.up.set(0, Math.abs(a.y) > 0.5 ? 0 : 1, Math.abs(a.y) > 0.5 ? -1 : 0); cam.position.copy(c).addScaledVector(a, R * 2); cam.lookAt(c); cam.updateMatrixWorld(true); gl.clear(); gl.render(bakeScene, cam); x2.clearRect(0, 0, 256, 256); x2.drawImage(gl.domElement, 0, 0); views.push({ cam, px: x2.getImageData(0, 0, 256, 256).data }); }
+  bakeScene.remove(m);
+  const p = geo.attributes.position, n = geo.attributes.normal, col = new Float32Array(p.count * 3), v = new THREE.Vector3(), nv = new THREE.Vector3(), k = new THREE.Color(), base = mt.color || new THREE.Color(1, 1, 1);
+  const missing = [];
+  const sample = (view, i) => { v.fromBufferAttribute(p, i).project(view.cam); const px = Math.round((v.x * 0.5 + 0.5) * 255), py = Math.round((1 - (v.y * 0.5 + 0.5)) * 255), d = view.px; for (let r = 0; r <= 8; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; const x = px + dx, y = py + dy; if (x < 0 || y < 0 || x > 255 || y > 255) continue; const o = (y * 256 + x) * 4; if (d[o + 3] > 8) { k.setRGB(d[o] / 255, d[o + 1] / 255, d[o + 2] / 255, THREE.SRGBColorSpace); return true; } } return false; };
+  for (let i = 0; i < p.count; i++) { nv.fromBufferAttribute(n, i); const order = AXES.map((a, j) => [a.dot(nv), j]).sort((a, b) => b[0] - a[0]); if (order.some(([, j]) => sample(views[j], i))) col.set([k.r, k.g, k.b], i * 3); else missing.push(i); }
+  for (const i of missing) { const t = i - i % 3; let got = false; for (let q = t; q < t + 3 && !got; q++) if (!missing.includes(q)) { col.set([col[q * 3], col[q * 3 + 1], col[q * 3 + 2]], i * 3); got = true; } if (!got) col.set([base.r, base.g, base.b], i * 3); }
+  totalMissing += missing.length;
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); const out = { geo, mat: { color: new THREE.Color(1, 1, 1), vertexColors: true, side: mt.side, transparent: mt.transparent, opacity: mt.opacity, isMeshBasicMaterial: mt.isMeshBasicMaterial } }; bakeCache.set(key, out); return out;
+};
+const custom = mt => mt.onBeforeCompile !== noop && !mt.map?.isTexture;
+// movimento: userData.anim na peça ou num pai. uv1 = (peso, tipo + fase); o shader do jogo anima (renderer.cpp, sceneAnim)
+const KINDS = { sway: 1, flag: 2, water: 3, bob: 4, crowd: 5, bee: 7, scroll: 8 };
+const animOf = o => { for (let n = o; n; n = n.parent) if (n.userData.anim) return { tag: n.userData.anim, root: n }; return null; };
+const hash01 = (x, z) => { const v = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return v - Math.floor(v); };
+const animUV = ({ tag, root }, pos, n) => {
+  const s = new Float32Array(n * 2), v = new THREE.Vector3(), org = new THREE.Vector3().setFromMatrixPosition(root.matrixWorld);
+  const needBox = tag.k === 'bob' || (tag.k === 'flag' && !tag.rad) || (tag.k === 'sway' && !tag.rad && tag.ground === undefined);
+  const box = needBox ? (tag._box || (tag._box = new THREE.Box3().setFromObject(root))) : null, c = box ? box.getCenter(new THREE.Vector3()) : org, H = box ? Math.max(box.max.y - box.min.y, 1e-3) : 1, ph0 = tag.ph ?? hash01(c.x, c.z);
+  for (let i = 0; i < n; i++) { v.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]); let w = tag.a ?? 1, ph = ph0;
+    if (tag.k === 'sway') w = tag.rad ? tag.a * v.distanceTo(org) : tag.ground !== undefined ? tag.a * Math.max(v.y - tag.ground, 0) : tag.a * H * Math.pow(Math.max(0, (tag.hang ? box.max.y - v.y : v.y - box.min.y) / H), 1.5);
+    else if (tag.k === 'flag') w = tag.rad ? tag.a * v.distanceTo(org) / tag.L : tag.a * Math.max(0, (box.max.y - v.y) / H);
+    else if (tag.k === 'crowd') w = 1;
+    else if (tag.k === 'bee') w = tag.r;
+    else if (tag.k === 'scroll') { w = Math.abs(tag.a); ph = (tag.x ? 0.5 : 0) + (tag.a < 0 ? 0.375 : 0.125); }
+    s[i * 2] = w; s[i * 2 + 1] = KINDS[tag.k] + Math.min(0.999, ph - Math.floor(ph)); }
+  return s; };
+// copia só o trecho [start, start+count) como triângulos soltos, no espaço do mundo
+const piece = (geo, start, count, matrix, wantUv, wantCol, anim) => {
+  const src = geo.index ? geo.toNonIndexed() : geo, n = Math.min(count, src.attributes.position.count - start), flip = matrix.determinant() < 0;
+  if (!src.attributes.normal) src.computeVertexNormals();
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = wantUv ? new Float32Array(n * 2) : null, col = wantCol ? new Float32Array(n * 3) : null, v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(matrix);
+  for (let t = 0; t + 2 < n; t += 3) for (let k = 0; k < 3; k++) {
+    const i = start + t + (flip && k ? 3 - k : k), o = t + k;   // espelhado: inverte a ordem para a face continuar para fora
+    v.fromBufferAttribute(src.attributes.position, i).applyMatrix4(matrix); pos.set([v.x, v.y, v.z], o * 3);
+    v.fromBufferAttribute(src.attributes.normal, i).applyMatrix3(nm).normalize(); nor.set([v.x, v.y, v.z], o * 3);
+    if (uv) uv.set([src.attributes.uv ? src.attributes.uv.getX(i) : 0, src.attributes.uv ? src.attributes.uv.getY(i) : 0], o * 2);
+    if (col) col.set([src.attributes.color.getX(i), src.attributes.color.getY(i), src.attributes.color.getZ(i)], o * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  if (uv) g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); if (col) g.setAttribute('color', new THREE.BufferAttribute(col, 3)); if (anim && anim.tag.k !== 'spin') g.setAttribute('uv1', new THREE.BufferAttribute(animUV(anim, pos, n), 2)); return g;
+};
+// setor do cenário: centro do ringue, e fatias de 60 graus em duas distâncias. A peça vai para o setor do seu primeiro vértice
+const sectorOf = (mesh, start, count) => { const g = mesh.geometry, p = g.attributes.position, i0 = g.index ? g.index.getX(start) : start, v = new THREE.Vector3().fromBufferAttribute(p, i0).applyMatrix4(mesh.matrixWorld), d = Math.hypot(v.x, v.z); return d < 6 ? 'c' : (d < 22 ? 'n' : 'f') + Math.floor((Math.atan2(v.z, v.x) + Math.PI) / (Math.PI / 3)); };
+const put = (mesh, mt, start, count, w, anim = null) => {
+  const map = mt.map?.isTexture ? mt.map : null, vc = !!mt.vertexColors && !!mesh.geometry.attributes.color;
+  const k = [mt.color ? mt.color.getHexString() : 'fff', map?.uuid || '', vc, w.toFixed(4), mt.side === THREE.DoubleSide, !!mt.transparent, (mt.opacity ?? 1).toFixed(2), !!mt.isMeshBasicMaterial, anim ? (anim.tag.k === 'spin' ? anim.root.uuid : 'anim') : '', sectorOf(mesh, start, count)].join('|');
+  if (!buckets.has(k)) buckets.set(k, { mt, map, vc, w, list: [], spin: anim?.tag.k === 'spin' ? anim : null });
+  buckets.get(k).list.push(piece(mesh.geometry, start, count, mesh.matrixWorld, !!map, vc, anim));
+};
+const visible = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
+// corda: peça fina e comprida, quase do tamanho do lado do ringue, em cima da linha das cordas (270 unidades = 3,29 m do centro)
+const isRope = o => { const b = new THREE.Box3().setFromObject(o), d = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()); if (c.y < 0.25 || c.y > 1.8 || d.y > 0.2) return false; const alongX = d.x > 5.4 && d.x < 7.8 && d.z < 0.2 && Math.abs(Math.abs(c.z) - 3.29) < 0.3, alongZ = d.z > 5.4 && d.z < 7.8 && d.x < 0.2 && Math.abs(Math.abs(c.x) - 3.29) < 0.3; return alongX || alongZ; };
+scene.traverse(o => {
+  if (!o.isMesh || o.userData.hull || !visible(o) || !o.geometry.attributes.position) return;
+  if (o.isInstancedMesh) {   // instanciada: vira cópias soltas com a cor de cada uma; conjunto pesado demais fica mais ralo, com cada cópia maior
+    const mt = Array.isArray(o.material) ? o.material[0] : o.material, bk = custom(mt) || o.instanceColor ? (custom(mt) ? bakeColors(o.geometry, mt) : null) : null, geo = bk ? bk.geo : (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry), tris = geo.attributes.position.count / 3;
+    if (!bk && o.instanceColor && !geo.attributes.color) geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3));
+    const useMt = bk ? bk.mat : (o.instanceColor ? { color: new THREE.Color(1, 1, 1), vertexColors: true, side: mt.side, transparent: mt.transparent, opacity: mt.opacity } : mt), step = Math.max(1, Math.ceil(tris * o.count / (key === 'jack' ? 80000 : 150000))), grow = Math.cbrt(step);
+    if (step > 1) log(`instanciada rala 1 a cada ${step}: ${o.count} x ${tris | 0} triângulos`);
+    const im = new THREE.Matrix4(), world = o.matrixWorld.clone(), ic = new THREE.Color(), sc = new THREE.Matrix4().makeScale(grow, grow, grow);
+    for (let i = 0; i < o.count; i += step) { o.getMatrixAt(i, im); const g2 = geo.clone(); if (o.instanceColor) { o.getColorAt(i, ic); const c2 = g2.attributes.color; for (let v = 0; v < c2.count; v++) c2.setXYZ(v, c2.getX(v) * ic.r, c2.getY(v) * ic.g, c2.getZ(v) * ic.b); } const inst = world.clone().multiply(im); let an = animOf(o); if (an?.tag.k === 'crowd') { const ip = new THREE.Vector3().setFromMatrixPosition(inst); an = { root: an.root, tag: { k: 'crowd', ph: Math.atan2(ip.x, -ip.z) * 3 / 6.2832 } }; } put({ geometry: g2, matrixWorld: inst.multiply(sc) }, useMt, 0, geo.attributes.position.count, 0, an); }
+    return;
+  }
+  const mt0 = Array.isArray(o.material) ? o.material[0] : o.material;
+  if (isRope(o)) { const y = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld).y; ropes.set(y.toFixed(2), { y, c: mt0.color.clone() }); return; }
+  seen++;
+  const hull = o.parent?.children.find(h => h.userData.hull && h.geometry === o.geometry), far = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()).length() > 14, w = far ? 0 : (hull?.userData.outlineW ?? 0);
+  const total = o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count;
+  if (Array.isArray(o.material)) { const gs = o.geometry.groups.length ? o.geometry.groups : [{ start: 0, count: total, materialIndex: 0 }]; for (const g of gs) put(o, o.material[g.materialIndex], g.start, g.count, w, animOf(o)); }
+  else if (custom(o.material)) { const b = bakeColors(o.geometry, o.material); put({ geometry: b.geo, matrixWorld: o.matrixWorld }, b.mat, 0, b.geo.attributes.position.count, w, animOf(o)); }
+  else put(o, o.material, 0, total, w, animOf(o));
+});
+let nSpin = 0; const root = new THREE.Object3D(); root.name = 'root';
+const rgb = (c, n, o) => { const k = new THREE.Color(c); k.convertLinearToSRGB(); o[n + 'R'] = k.r; o[n + 'G'] = k.g; o[n + 'B'] = k.b; };
+const meta = { indoor: look.indoor ? 1 : 0, scale: 1, tintR: look.tint[0], tintG: look.tint[1], tintB: look.tint[2], fogNear: look.fog[0], fogFar: look.fog[1] }; rgb(look.horizon, 'horizon', meta); rgb(look.zenith, 'zenith', meta);
+for (const r of window.__ropeInfo) { const k = r.y.toFixed(2); if (!ropes.has(k)) ropes.set(k, { y: r.y, c: new THREE.Color(r.color) }); }
+const list = [...ropes.values()].sort((a, b) => a.y - b.y); meta.ropeN = list.length; list.forEach((r, i) => { meta['ropeY' + i] = r.y; const k = r.c.clone().convertLinearToSRGB(); meta['ropeR' + i] = k.r; meta['ropeG' + i] = k.g; meta['ropeB' + i] = k.b; });
+root.userData = { rig: meta };
+for (const b of buckets.values()) {
+  const out = new THREE.MeshStandardMaterial({ color: b.mt.color || 0xffffff, map: b.map, vertexColors: b.vc, side: b.mt.side === THREE.DoubleSide ? THREE.DoubleSide : THREE.FrontSide, transparent: !!b.mt.transparent, opacity: b.mt.opacity ?? 1 });
+  out.userData = { unlit: !!b.mt.isMeshBasicMaterial };
+  const m = new THREE.Mesh(mergeVertices(mergeGeometries(b.list), 1e-4), out); m.userData = { outlineW: b.w }; root.add(m);
+  if (b.spin) { const pv = new THREE.Vector3().setFromMatrixPosition(b.spin.root.matrixWorld), ax = new THREE.Vector3(...b.spin.tag.axis).transformDirection(b.spin.root.matrixWorld); m.geometry.translate(-pv.x, -pv.y, -pv.z); m.position.copy(pv); m.name = `sceneSpin_${ax.x.toFixed(3)}_${ax.y.toFixed(3)}_${ax.z.toFixed(3)}_${b.spin.tag.sp.toFixed(3)}`; nSpin++; }
+}
+log(`${key}: origem ${seen}, unidas ${buckets.size}, sem cor ${totalMissing}, com movimento ${[...buckets.values()].filter(b => b.list[0].attributes.uv1).length}, giram ${nSpin}, cordas ${list.length} em ${list.map(r => r.y.toFixed(2)).join(' ')}`);
+const buf = await new GLTFExporter().parseAsync(root, { binary: true, maxTextureSize: 2048 });
+const r = await fetch(`/arena_${key}.glb`, { method: 'PUT', body: buf });
+log(`${r.status} pronto: ${(buf.byteLength / 1048576).toFixed(1)} MB`); document.title = r.ok ? 'OK' : 'ERRO';
+</script>

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K.O.-RAMA · Boneco inflado</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d1626; color: #eee; font: 13px system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 10px; left: 10px; background: #0008; padding: 8px 10px; border-radius: 8px; }
+  #hud button { margin: 2px; }
+  #hud label { display: block; margin-top: 4px; }
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"}}</script>
+</head>
+<body>
+<div id="hud">
+  <b>Boneco inflado · <span id="nome">Valéria</span></b><br>
+  <button data-face="normal">Normal</button><button data-face="angry">Raiva</button><button data-face="pain">Dor</button><button data-face="ko">K.O.</button><br>
+  <label>Espessura <input id="thick" type="range" min="0.05" max="1.2" step="0.01" value="0.6"> <span></span></label>
+  <label>Arredondado <input id="round" type="range" min="0.1" max="1.5" step="0.02" value="0.9"> <span></span></label>
+  <div id="status">Carregando…</div>
+</div>
+<script type="module">
+// Personagem como "boneco inflado": cada peça do rig 2D do jogo (cabeça, tronco, pernas, luvas) vira uma almofada 3D
+// com o contorno exato do sprite — topo achatado, bordas redondas —, a arte de frente na frente e a de costas atrás.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const CH = new URLSearchParams(location.search).get('p') || 'valeria';
+const SPR = '../../engine-cpp/assets/sprites/';
+const PX_PER_M = 245;                      // quadro de 480 px ≈ personagem de ~1,8 m
+const $ = s => document.querySelector(s);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1d1626);
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.05, 50);
+camera.position.set(0.6, 1.1, 4.2);
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 0.95, 0); controls.update();
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+scene.add(new THREE.HemisphereLight(0xffffff, 0x6a5a7a, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(1.5, 3, 4); scene.add(sun);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(1.6, 48), new THREE.MeshBasicMaterial({ color: 0x2c6b4a }));
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
+
+// sombreado de desenho: 3 faixas de luz, a arte do sprite manda na cor
+const ramp = (() => { const d = new Uint8Array([150, 150, 150, 255, 215, 215, 215, 255, 255, 255, 255, 255]); const t = new THREE.DataTexture(d, 3, 1); t.magFilter = t.minFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
+const toon = map => new THREE.MeshToonMaterial({ map, gradientMap: ramp });
+const outline = new THREE.MeshBasicMaterial({ color: 0x0f1c10, side: THREE.BackSide });
+outline.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normal * 0.012;'); };
+
+// ---------------------------------------------------------------- atlas
+const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = SPR + CH + '.png'; });
+const atlas = {};
+for (const l of (await (await fetch(SPR + CH + '.atlas')).text()).split('\n')) {
+  const a = l.trim().split(/\s+/); if (a.length < 5 || a[0].startsWith('#')) continue;
+  const n = a.slice(1).map(Number); atlas[a[0]] = { x: n[0], y: n[1], w: n[2], h: n[3], ox: n[4] || 0, oy: n[5] || 0 };
+}
+// recorta uma peça num canvas do tamanho do quadro (480) — tudo fica no mesmo sistema de coordenadas
+function frameCanvas(names, size = 480) {
+  const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d');
+  for (const n of [].concat(names)) { const a = atlas[n]; if (a) g.drawImage(img, a.x, a.y, a.w, a.h, a.ox, a.oy, a.w, a.h); }
+  return c;
+}
+function cleanShadow(c) {          // tira a sombra do chão (cinza escuro semitransparente) que alguns sprites trazem
+  const g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  for (let i = 0; i < p.length; i += 4) { const a = p[i + 3], mx = Math.max(p[i], p[i + 1], p[i + 2]), mn = Math.min(p[i], p[i + 1], p[i + 2]); if (a > 0 && a < 235 && mx - mn < 25 && mx < 90) p[i + 3] = 0; }
+  g.putImageData(d, 0, 0); return c;
+}
+// costas: espelha (de costas a esquerda vira direita) e estende a cor das bordas para cobrir o contorno da frente
+function backCanvas(c, passes = 24) {
+  const s = c.width, o = document.createElement('canvas'); o.width = o.height = s; const g = o.getContext('2d');
+  g.translate(s, 0); g.scale(-1, 1); g.drawImage(c, 0, 0);
+  const d = g.getImageData(0, 0, s, s), p = d.data;
+  for (let k = 0; k < passes; k++) {
+    const q = new Uint8ClampedArray(p);
+    for (let y = 1; y < s - 1; y++) for (let x = 1; x < s - 1; x++) {
+      const i = (y * s + x) * 4; if (q[i + 3] > 128) continue;
+      for (const j of [i - 4, i + 4, i - s * 4, i + s * 4]) if (q[j + 3] > 128) { p[i] = q[j]; p[i + 1] = q[j + 1]; p[i + 2] = q[j + 2]; p[i + 3] = 255; break; }
+    }
+  }
+  const o2 = document.createElement('canvas'); o2.width = o2.height = s; o2.getContext('2d').putImageData(d, 0, 0); return o2;
+}
+const tex = c => { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+
+// ---------------------------------------------------------------- inflar
+// máscara -> distância até a borda (chanfro 3-4) -> altura = almofada: sobe redondo na borda e fica plana no meio
+function inflate(front, back, { step = 3, thick = 0.22, round = 0.45 } = {}) {
+  const s = front.width, P = front.getContext('2d').getImageData(0, 0, s, s).data;
+  const W = Math.floor(s / step) + 1, inside = new Uint8Array(W * W), dist = new Float32Array(W * W);
+  let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+    const x = Math.min(s - 1, i * step), y = Math.min(s - 1, j * step);
+    if (P[(y * s + x) * 4 + 3] > 120) { inside[j * W + i] = 1; x0 = Math.min(x0, i); y0 = Math.min(y0, j); x1 = Math.max(x1, i); y1 = Math.max(y1, j); }
+  }
+  for (let k = 0; k < W * W; k++) dist[k] = inside[k] ? 1e9 : 0;
+  const pass = (ii, jj, di) => { for (const [dx, dy, w] of di) { const a = (jj + dy) * W + ii + dx; if (a >= 0 && a < W * W) dist[jj * W + ii] = Math.min(dist[jj * W + ii], dist[a] + w); } };
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) if (inside[j * W + i]) pass(i, j, [[-1, 0, 3], [0, -1, 3], [-1, -1, 4], [1, -1, 4]]);
+  for (let j = W - 1; j >= 0; j--) for (let i = W - 1; i >= 0; i--) if (inside[j * W + i]) pass(i, j, [[1, 0, 3], [0, 1, 3], [1, 1, 4], [-1, 1, 4]]);
+  const minDim = Math.min(x1 - x0, y1 - y0) * step;           // em px
+  const R = Math.max(2, round * 0.5 * minDim / step * 3);    // raio do arredondado (em unidades do chanfro)
+  const H = thick * 0.5 * minDim / PX_PER_M;                  // meia espessura em metros
+  const hAt = k => { const d = Math.min(1, dist[k] / R); return H * Math.sqrt(1 - (1 - d) * (1 - d)); };
+  const pos = [], uvF = [], idx = [], vid = new Int32Array(W * W).fill(-1);
+  for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i; let near = inside[k];
+    if (!near) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const a = (j + dy) * W + i + dx; if (a >= 0 && a < W * W && inside[a]) near = 1; }
+    if (!near) continue;
+    vid[k] = pos.length / 3;
+    const x = i * step, y = j * step;
+    pos.push((x - 240) / PX_PER_M, (480 - y) / PX_PER_M, inside[k] ? hAt(k) : 0);
+    uvF.push(x / s, 1 - y / s);
+  }
+  for (let j = 0; j < W - 1; j++) for (let i = 0; i < W - 1; i++) {
+    const a = vid[j * W + i], b = vid[j * W + i + 1], c = vid[(j + 1) * W + i], d = vid[(j + 1) * W + i + 1];
+    if (a < 0 || b < 0 || c < 0 || d < 0) continue;
+    if (!(inside[j * W + i] || inside[j * W + i + 1] || inside[(j + 1) * W + i] || inside[(j + 1) * W + i + 1])) continue;
+    idx.push(a, c, b, b, c, d);
+  }
+  const mk = (sign, uvs) => {
+    const g = new THREE.BufferGeometry();
+    const p = pos.slice(); for (let k = 2; k < p.length; k += 3) p[k] *= sign;
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    g.setIndex(sign > 0 ? idx : idx.map((_, n) => idx[n - (n % 3) + [0, 2, 1][n % 3]])); g.computeVertexNormals(); return g;
+  };
+  const uvB = []; for (let k = 0; k < uvF.length; k += 2) uvB.push(1 - uvF[k], uvF[k + 1]);   // costas: espelhado
+  const grp = new THREE.Group();
+  const fg = mk(1, uvF), bg = mk(-1, uvB);
+  const fm = new THREE.Mesh(fg, toon(tex(front))), bm = new THREE.Mesh(bg, toon(tex(back)));
+  grp.add(fm, bm, new THREE.Mesh(fg, outline), new THREE.Mesh(bg, outline));
+  grp.userData = { front: fm, center: new THREE.Vector3(((x0 + x1) / 2 * step - 240) / PX_PER_M, (480 - (y0 + y1) / 2 * step) / PX_PER_M, 0) };
+  return grp;
+}
+
+// ---------------------------------------------------------------- Valéria
+const P = {}; const opts = () => ({ thick: +$('#thick').value, round: +$('#round').value });
+const FACES = { normal: [['valeriaRigF0_eyesN'], 'valeriaRigM_grin'], angry: [['valeriaRigF0_eyesN', 'valeriaRigE_brows'], 'valeriaRigM_grit'],
+                pain: [['valeriaRigE_pain'], 'valeriaRigM_pain'], ko: [['valeriaRigE_x'], 'valeriaRigM_oh'] };
+let face = 'normal';
+const puppet = new THREE.Group(); scene.add(puppet);
+function build() {
+  puppet.clear();
+  const o = opts();
+  const headF = frameCanvas(['valeriaRigF0_head', ...FACES[face][0], FACES[face][1]]);
+  P.head = inflate(headF, backCanvas(frameCanvas('valeriaRigB0_head')), { ...o, thick: o.thick * 1.1 });
+  P.torso = inflate(cleanShadow(frameCanvas('valeriaRigF0_torso')), backCanvas(cleanShadow(frameCanvas('valeriaRigB0_torso'))), o);
+  P.legL = inflate(frameCanvas('valeriaRigF0_legL'), backCanvas(frameCanvas('valeriaRigF0_legL')), { ...o, thick: o.thick * 1.6 });
+  P.legR = inflate(frameCanvas('valeriaRigF0_legR'), backCanvas(frameCanvas('valeriaRigF0_legR')), { ...o, thick: o.thick * 1.6 });
+  // luva = guarda-chuva-escudo (quadro de 360): frente = a face colorida, costas = o cabo na mão
+  const gF = document.createElement('canvas'); gF.width = gF.height = 480; const gb = document.createElement('canvas'); gb.width = gb.height = 480;
+  const GF = atlas.valeriaGloveFrontFrames_0, GB = atlas.valeriaGloveBackFrames_0;
+  gF.getContext('2d').drawImage(img, GF.x, GF.y, GF.w, GF.h, 60, 60, 360, 360); gb.getContext('2d').drawImage(img, GB.x, GB.y, GB.w, GB.h, 60, 60, 360, 360);
+  for (const k of ['L', 'R']) { P['glove' + k] = inflate(gF, backCanvas(gb), { ...o, thick: o.thick * 0.7 }); P['glove' + k].scale.setScalar(0.55); }
+  // camadas: pernas atrás, tronco, cabeça na frente
+  P.legL.position.z = P.legR.position.z = -0.03; P.head.position.z = 0.05;
+  for (const k of ['legL', 'legR', 'torso', 'head']) puppet.add(P[k]);
+  for (const k of ['gloveL', 'gloveR']) puppet.add(P[k]);
+}
+function pose(t) {
+  // ginga simples enquanto o rig do jogo não entra: quica, tronco balança, luvas na guarda
+  const bob = Math.abs(Math.sin(t * 3.2)) * 0.03, sw = Math.sin(t * 1.6);
+  puppet.position.y = bob;
+  P.torso.rotation.z = sw * 0.03; P.head.rotation.z = -sw * 0.04; P.head.position.y = bob * 0.4;
+  P.gloveL.position.set(-0.5, 0.95 + Math.sin(t * 3.2) * 0.02, 0.25); P.gloveR.position.set(0.5, 0.95 + Math.cos(t * 3.2) * 0.02, 0.25);
+  P.gloveL.rotation.y = 0.25; P.gloveR.rotation.y = -0.25;
+  for (const k of ['gloveL', 'gloveR']) P[k].position.sub(P[k].userData.center.clone().multiplyScalar(P[k].scale.x));
+}
+build();
+for (const id of ['thick', 'round']) { const el = $('#' + id), sp = el.nextElementSibling; const u = () => sp.textContent = (+el.value).toFixed(2); u(); el.addEventListener('change', () => { u(); build(); }); el.addEventListener('input', u); }
+document.querySelectorAll('[data-face]').forEach(b => b.onclick = () => { face = b.dataset.face; build(); });
+$('#status').textContent = 'Pronto · arraste para girar';
+window.PUP = { THREE, scene, camera, controls, P, puppet, build };
+const clock = new THREE.Clock();
+(function loop() { requestAnimationFrame(loop); pose(clock.elapsedTime); renderer.render(scene, camera); })();
+</script>
+</body>
+</html>
