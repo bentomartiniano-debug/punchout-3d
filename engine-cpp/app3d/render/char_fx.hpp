@@ -159,7 +159,7 @@ struct ConeFx : FxGeo {
     static float thrustK(float p) { return p < 0.3f ? 0.f : p < 0.45f ? std::sin((p - 0.3f) / 0.15f * 1.5708f) : p < 0.66f ? 1.f : 1.f - smooth((p - 0.66f) / 0.3f); }
     // o braço direito arma para trás e para cima, e desce estocando; o corpo vai junto
     static void pose(Fighter& view, const Fighter& f) {
-        if (!active(f)) return; const float p = prog(f), w = smooth(p / 0.2f) * (1.f - smooth((p - 0.26f) / 0.1f)), k = thrustK(p), on = smooth(p / 0.1f) * (1.f - smooth((p - 0.9f) / 0.1f));
+        if (!active(f)) return; const float p = prog(f), w = smooth(p / 0.2f) * (1.f - smooth((p - 0.26f) / 0.1f)), k = thrustK(p), on = smooth(p / 0.1f) * (1.f - smooth((p - 0.9f) / 0.1f)); view.isLeftPunch = false;   // quem estoca é sempre a direita
         const float x = 30.f + 8.f * w - 14.f * k, y = 70.f + 16.f * w - 2.f * k, z = 10.f - 26.f * w + 62.f * k;
         view.gloveR.x += (x - view.gloveR.x) * on; view.gloveR.y += (y - view.gloveR.y) * on; view.gloveR.z += (z - view.gloveR.z) * on;
         view.gloveL.x += (-24.f - view.gloveL.x) * on; view.gloveL.y += (66.f - view.gloveL.y) * on; view.gloveL.z += (6.f - 8.f * k - view.gloveL.z) * on;
@@ -342,6 +342,59 @@ struct HeatFx : FxGeo {
         { const unsigned b = unsigned(v.size() / 12); for (int j = 0; j < N; j++) { const float a = 6.28318f * float(j) / N + T * 0.6f, tooth = j % 2 ? 0.8f : 0.92f - 0.06f * std::sin(T * 11.f + float(j)); const glm::vec3 r(std::cos(a), 0, std::sin(a)); put(v, c + r * (R * tooth), up, core, kUnlit); put(v, c + r * R, up, ember, kUnlit); }
           for (int j = 0; j < N; j++) { const unsigned i0 = b + unsigned(j * 2), i1 = i0 + 1, i2 = b + unsigned(((j + 1) % N) * 2), i3 = i2 + 1; i.insert(i.end(), {i0, i2, i1, i1, i2, i3}); } }
         { const unsigned b = put(gv, c, up, ember * (0.22f * k), kUnlit); for (int j = 0; j < N; j++) { const float a = 6.28318f * float(j) / N; put(gv, c + glm::vec3(std::cos(a), 0, std::sin(a)) * (R * 1.25f), up, glm::vec3(0.f), kUnlit); } for (int j = 0; j < N; j++) gi.insert(gi.end(), {b, b + 1 + unsigned(j), b + 1 + unsigned((j + 1) % N)}); }
+    }
+};
+
+// ---------------- Nocaute final ----------------
+// O golpe que encerra a luta arremessa quem perdeu: vai pelo ar deitado para trás, com os pés para cima, até bater nas cordas.
+// Se o golpe foi um especial, ele sai girando para o céu, some de tão longe e vira uma estrelinha que pisca.
+struct KoFx : FxGeo {
+    static constexpr float kFly = 54.f, kStar = 44.f;   // quadros do voo para o céu e da estrela
+    int mode = 0; float t = 0.f, u = 0.f, r0 = 125.f, size = 1.f; glm::vec3 from{0.f}, to{0.f}, side{1.f, 0.f, 0.f}; bool justStar = false;
+    void reset() { *this = KoFx{}; }
+    bool blast() const { return mode == 2; }
+    bool on() const { return mode != 0; }
+    // from: os pés de quem perdeu; eye: a câmera (o voo para o céu vai para longe dela, para ficar na tela)
+    void start(bool bySkill, const Fighter& f, const glm::vec3& feet, const glm::vec3& eye, float sz) {
+        reset(); mode = bySkill ? 2 : 1; r0 = f.radius; size = sz; from = feet;
+        glm::vec3 d(feet.x - eye.x, 0.f, feet.z - eye.z); const float L = glm::length(d); d = L > 0.05f ? d / L : glm::vec3(0, 0, -1);
+        const float yaw = f.isPlayer ? 0.36f : 0.26f;   /* um pouco para o lado: no meio do alto da tela fica o relógio do round */ const glm::vec3 dir(d.x * std::cos(yaw) - d.z * std::sin(yaw), 0.f, d.x * std::sin(yaw) + d.z * std::cos(yaw));
+        to = feet + dir * 30.f + glm::vec3(0, 17.f, 0); side = glm::normalize(glm::cross(glm::vec3(0, 1, 0), dir));
+    }
+    float flyK() const { return std::pow(sat(t / kFly), 1.7f); }
+    // a câmera acompanha o voo e a estrela, e volta para o ringue no fim
+    float lookK() const { return mode == 2 ? smooth(t / 18.f) * (1.f - smooth((t - (kFly + kStar - 8.f)) / 14.f)) : 0.f; }
+    // mira abaixo dele: quem voa (e depois a estrela) fica no alto da tela, fora do letreiro do resultado que ocupa o meio
+    glm::vec3 lookAt() const { const float e = flyK(); return (t >= kFly ? to : pos() + glm::vec3(0, 0.85f * size * (1.f - 0.78f * e), 0)) - glm::vec3(0, 8.f * e, 0); }
+    glm::vec3 pos() const { const float e = flyK(); return from + (to - from) * e + glm::vec3(0, 1.3f * std::sin(e * 3.14159f), 0); }
+    void tick(const Fighter& f, Particles& P) {
+        justStar = false; if (mode == 0) return;
+        if (f.state != FIGHTER_KNOCKDOWN) { reset(); return; }   // a luta recomeçou
+        if (mode == 1) { u = sat((f.radius - r0) / std::max(1.f, 232.f - r0)); return; }
+        const float t0 = t; t += 1.f; if (t0 < kFly && t >= kFly) justStar = true;
+        if (t0 == 0.f) for (int i = 0; i < 26; i++) { const float a = float(i) / 26.f * 6.2832f; const glm::vec3 r(std::cos(a), 0, std::sin(a)); Particle q; q.kind = kLine; q.p = from + glm::vec3(0, 0.1f, 0) + r * 0.25f; q.v = r * P.rnd(0.08f, 0.13f); q.dir = r; q.len = 0.35f; q.size = 0.06f; q.life = P.rnd(12, 18); q.drag = 0.9f; q.noFloor = true; q.c0 = q.c1 = glm::vec4(1.f, 0.95f, 0.7f, 1.f); P.emit(q); }
+        if (t < kFly) { const float k = 1.f - 0.78f * flyK(); const glm::vec3 c = pos() + glm::vec3(0, 0.85f * size * k, 0);   // rastro de fumaça e riscos
+            Particle s; s.kind = kPuff; s.p = c + P.dir() * (0.12f * k); s.v = P.dir() * 0.006f; s.size = P.rnd(0.14f, 0.22f) * (0.5f + 0.5f * k); s.grow = 0.004f; s.life = P.rnd(26, 40); s.noFloor = true; s.c0 = glm::vec4(1.f, 0.98f, 0.92f, 1.f); s.c1 = glm::vec4(0.88f, 0.86f, 0.82f, 1.f); P.emit(s);
+            if (int(t) % 2 == 0) { const glm::vec3 d = glm::normalize(to - from); Particle l; l.kind = kLine; l.p = c - d * 0.3f + P.dir() * (0.25f * k); l.v = glm::vec3(0.f); l.dir = d; l.len = P.rnd(0.5f, 0.9f); l.size = 0.035f; l.life = P.rnd(6, 10); l.noFloor = true; l.drag = 1.f; l.c0 = l.c1 = glm::vec4(1.f, 0.98f, 0.92f, 1.f); P.emit(l); } }
+    }
+    void apply(FighterPose& q) const {
+        if (mode == 1) {   // pelo ar até as cordas: sobe, deita para trás (os pés vão para cima e para a frente) e desce na corda
+            const float k = smooth(u / 0.18f) * (1.f - smooth((u - 0.8f) / 0.2f)), arc = std::sin(u * 3.14159f); const glm::vec3 c(0, 0.85f * size, 0);
+            q.root = q.root * glm::translate(glm::mat4(1.f), glm::vec3(0, 0.5f * arc * size, 0) + c) * glm::rotate(glm::mat4(1.f), -1.05f * k, glm::vec3(1, 0, 0)) * glm::translate(glm::mat4(1.f), -c);
+            q.neckTilt -= 0.5f * k; return; }
+        if (mode != 2) return;
+        if (t >= kFly) { q.root = glm::translate(glm::mat4(1.f), glm::vec3(0, -300.f, 0)); return; }   // já virou estrela
+        const float e = flyK(), k = 1.f - 0.78f * e, spin = t * 0.5f; glm::mat4 R = q.root; R[3] = glm::vec4(0, 0, 0, 1); const glm::vec3 c(0, 0.85f * size, 0);
+        q.root = glm::translate(glm::mat4(1.f), pos() + c * k) * glm::rotate(glm::mat4(1.f), -spin, side) * glm::rotate(glm::mat4(1.f), spin * 0.37f, glm::vec3(0, 1, 0)) * glm::scale(glm::mat4(1.f), glm::vec3(k)) * glm::translate(glm::mat4(1.f), -c) * R;
+    }
+    // a estrelinha: quatro pontas de luz viradas para a câmera, acendendo de uma vez e piscando até sumir
+    void build(const glm::vec3& eye, V& gv, I& gi) const {
+        if (mode != 2 || t < kFly - 2.f || t > kFly + kStar) return; const float s = (t - kFly + 2.f) / (kStar + 2.f), amp = std::pow(std::sin(3.14159f * s), 0.6f) * (0.75f + 0.25f * std::sin(s * 42.f));
+        const glm::vec3 c = to + glm::vec3(0, 0.85f * size * 0.22f, 0), toCam = glm::normalize(eye - c), right = glm::normalize(glm::cross(glm::vec3(0, 1, 0), toCam)), up = glm::cross(toCam, right), col = glm::vec3(1.f, 0.97f, 0.8f) * amp;
+        const auto ray = [&](const glm::vec3& d, const glm::vec3& w, float L, float W) { const unsigned b = put(gv, c, toCam, col, kUnlit); put(gv, c + d * L, toCam, glm::vec3(0.f), kUnlit); put(gv, c + w * W, toCam, glm::vec3(0.f), kUnlit); put(gv, c - d * L, toCam, glm::vec3(0.f), kUnlit); put(gv, c - w * W, toCam, glm::vec3(0.f), kUnlit); gi.insert(gi.end(), {b, b + 1, b + 2, b, b + 2, b + 3, b, b + 3, b + 4, b, b + 4, b + 1}); };
+        const float L = 5.4f * amp, rot = 0.25f * std::sin(s * 9.f); const glm::vec3 a = right * std::cos(rot) + up * std::sin(rot), b2 = up * std::cos(rot) - right * std::sin(rot), d1 = glm::normalize(a + b2), d2 = glm::normalize(a - b2);
+        ray(a, b2, L, 0.42f * amp); ray(b2, a, L, 0.42f * amp); ray(d1, d2, L * 0.45f, 0.3f * amp); ray(d2, d1, L * 0.45f, 0.3f * amp);
+        ball(gv, gi, c, right * (0.45f * amp), up * (0.45f * amp), toCam * (0.45f * amp), col * 0.9f, kUnlit, 0.f, 5, 8);
     }
 };
 

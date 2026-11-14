@@ -42,6 +42,7 @@ public:
     // Nocaute final: quadro do fim da luta e quadro em que o perdedor bateu nas cordas (0 = ainda não).
     // Ficam no estado para o voo do perdedor sair igual ao vivo e no replay.
     uint32_t matchEndFrame = 0, koRopeFrame = 0;
+    bool koBySkill = false;   // a última queda veio de um especial (ou golpe-assinatura) de quem ficou de pé
     GameStateEnum gameState = STATE_TITLE;
     float matchTime = 0.0f;
     float ringAngle = 0.0f;
@@ -170,6 +171,7 @@ private:
     int bufferedHand_ = -1; // -1 nenhum, 0 esquerda, 1 direita
     // combo de entrada dos especiais: jab, direto e gancho, nessa ordem (PLANO-COMBOS-E-ESQUIVA.md, etapa 3)
     int chain_ = 0;        // socos do combo já dados
+    bool chainCast_ = false;   // o especial que está sendo lançado veio do combo ou do fluxo (não cobra fôlego de novo)
     uint32_t chainSeen_ = 0;   // quais socos (golpe + mão) já entraram no combo
     int chainTimer_ = 0;   // quadros até o combo esfriar
     int flowWindow_ = 0;   // depois de uma esquiva bem feita, os especiais de fluxo saem sem combo

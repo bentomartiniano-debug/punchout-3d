@@ -277,7 +277,8 @@ public:
     // um risco do rastro: nasce atrás do ponto, na direção do movimento
     static void streak(Particles& P, const glm::vec3& at, const glm::vec3& dir, float len, bool white) { const glm::vec3 c = white ? glm::vec3(1.f, 0.98f, 0.92f) : glm::vec3(0.16f, 0.1f, 0.1f); Particle q; q.kind = kLine; q.p = at - dir * len * 0.5f; q.len = len; q.dir = dir; q.size = white ? 0.05f : 0.035f; q.life = P.rnd(6, 9); q.c0 = glm::vec4(c, 1.f); q.c1 = q.c0; q.noFloor = true; q.drag = 1.f; P.emit(q); }
     // gloves: false quando as luvas já deixam o rastro esticado (Renderer::Smear); aí só o corpo ganha riscos
-    void tick(int who, const Fighter& f, const FxBody& me, Particles& P, bool gloves = true) {
+    // body: false quando o corpo só anda porque o ringue girou na esquiva do outro (na tela ele fica parado: sem riscos)
+    void tick(int who, const Fighter& f, const FxBody& me, Particles& P, bool gloves = true, bool body = true) {
         const bool active = gloves && (isPunchState(f.state) || f.state == FIGHTER_SKILL);
         for (int g = 0; g < 2; g++) {
             const glm::vec3 now = me.glove[g], prev = ready_[who] ? prev_[who][g] : now; prev_[who][g] = now;
@@ -294,7 +295,7 @@ public:
         }
         // corpo andando rápido para o lado: riscos ao longo da altura dele, do lado de onde saiu (inclusive voando para as cordas depois do golpe que derruba)
         { const glm::vec3 prev = ready_[who] ? body_[who] : me.chest; body_[who] = me.chest; glm::vec3 d = me.chest - prev; d.y = 0.f; const float speed = glm::length(d);
-          if (speed > kBodySpeed) { const glm::vec3 dir = d / speed, side = glm::cross(dir, glm::vec3(0, 1, 0)); const float h = glm::max(0.3f, me.head.y - me.feet.y), w = kBodyR * me.size, len = std::min(0.9f, speed * 5.f) * me.size;
+          if (body && speed > kBodySpeed) { const glm::vec3 dir = d / speed, side = glm::cross(dir, glm::vec3(0, 1, 0)); const float h = glm::max(0.3f, me.head.y - me.feet.y), w = kBodyR * me.size, len = std::min(0.9f, speed * 5.f) * me.size;
             for (int k = 0; k < kBodyLines; k++) { const float y = me.feet.y + h * P.rnd(0.12f, 1.f), sw = P.rnd(-1.f, 1.f) * w; const glm::vec3 base = glm::vec3(me.chest.x, y, me.chest.z) - dir * w * 0.9f + side * sw;
               streak(P, base, dir, len * P.rnd(0.6f, 1.2f), k == 0); } } }
         ready_[who] = true;

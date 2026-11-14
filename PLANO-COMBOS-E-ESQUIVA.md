@@ -117,6 +117,56 @@ Todo especial (menos os do Batalhator) dura 1,7 vezes o tempo da ficha (`kSkillS
 
 ---
 
+## IA: defesa, esquiva e contra-ataque (FEITO, sem commit)
+
+Antes a defesa era sorteada uma vez por "sequência" de socos e só com o oponente parado, então martelar passava direto (96% de acertos limpos). Agora:
+
+- **Um sorteio por soco**, mesmo emendado no anterior.
+- **Tempo de reação:** a guarda sobe de 2 a 5 quadros depois de ler o soco; a esquiva sai na hora de o golpe cair no meio dela.
+- **Leitura do golpe:** soco pesado ou carregado pede mais esquiva; soco leve, mais guarda. Depois de uma esquiva, a próxima defesa prefere a guarda (duas esquivas seguidas giram o ringue demais).
+- **Apanhando em sequência:** depois de dois golpes limpos seguidos, o oponente fecha a guarda quase sempre (95%).
+- **Guarda mantida:** se o jogador emenda outro soco, a guarda continua fechada (85%).
+- **Larga o próprio golpe:** no começo do aviso de um soco comum, o oponente pode desistir e defender (50%). Na metade final do aviso ele está comprometido, e o soco do jogador entra como contra-ataque. Especial armado e combo de entrada vão até o fim.
+- **Especiais do jogador:** o oponente pode esquivar perto do acerto (50%, só parado). A guarda não segura especial.
+- **Contra-ataque:** depois de segurar um soco, responde com jab ou direto (45%, mais 25% se o jogador insiste em bater na guarda); depois de esquivar, com gancho (55%). O aviso é curto (10 e 14 quadros).
+
+Medição (`korama_tests --ai`, 90 s contra cada um dos 8 rivais, vida e fôlego repostos):
+
+| Situação | Antes | Agora |
+|---|---|---|
+| Jab isolado: acertos limpos | 71% | 44% (metade deles no aviso do rival) |
+| Jab martelado: acertos limpos | 96% | 27% |
+| Especial do jogador: esquivado | quase nunca | 20% |
+
+Os ajustes ficam em `include/ai.hpp`: `defenseChance`, `tellCancelChance`, `skillDodgeChance`, `counterChance`.
+
+---
+
+## Fôlego do combo e golpe em linha reta (FEITO, sem commit)
+
+**Fôlego.** Com o combo de entrada, um especial forte custava 95 de 100 (jab 18 + direto 22 + gancho 30 + especial 25) e um de fluxo 65; antes do combo o especial custava 25. Agora:
+
+- O soco que carrega um espaço do combo (diferente dos que já estão nele) custa 40% menos (`kChainPunchCost` em `src/engine.cpp`). Repetir o mesmo soco paga o preço cheio.
+- O especial lançado pelo combo ou pelo fluxo não cobra fôlego de novo nem falha por falta de fôlego. Os de gatilho rápido (curas, modos, escudos) continuam custando 20 a 25.
+- Resultado: especial forte 42 no total (jab 10,8 + direto 13,2 + gancho 18), especial de fluxo 24.
+
+**Golpe em linha reta.** Quando o oponente esquiva, o jogador no meio de um soco ou especial não gira mais com o ringue: termina o golpe para onde estava mirando, e a câmera fica com ele. Depois que o golpe bate, ele e a câmera se viram para o rival. É o mesmo tratamento que o oponente já tinha (etapa 2).
+
+---
+
+## Nocaute final: arremesso e estrelinha (FEITO, sem commit)
+
+Vale para a queda que encerra a luta na hora (a terceira queda, T.K.O.). Quedas anteriores e o nocaute por contagem continuam como eram.
+
+- **Golpe comum:** quem perdeu é arremessado. Vai pelo ar deitado para trás, com os pés para a frente e para cima, e bate nas cordas (chega mais rápido: 4 unidades por quadro em vez de 2,5).
+- **Golpe especial ou assinatura:** sai girando para o céu com rastro de fumaça, encolhe com a distância e vira uma estrelinha de quatro pontas que pisca e some (com um tilintar). A câmera da luta acompanha o voo olhando para cima e volta para o ringue; a estrela é desenhada por cima do cenário, então aparece mesmo em arena com teto. Ele não bate nas cordas nem fica pendurado nelas.
+- O motor marca `koBySkill` (quem ficou de pé estava num especial na hora da queda). O efeito é o `KoFx` em `app3d/render/char_fx.hpp`.
+- O replay mostra o arremesso e a subida; a estrela pode ficar fora do quadro, porque as câmeras do replay são fixas.
+
+Conferência por imagem: `KORAMA3D_NODEF` (oponente não defende), `KORAMA3D_NOHUD` (sem a HUD), `KORAMA3D_LAST_KD_P` (a próxima queda do jogador encerra a luta).
+
+---
+
 ## Etapa 4: recompensa da esquiva
 
 - Logo depois de uma esquiva que evita um golpe, abre uma janela curta (cerca de 20 quadros) de contra-ataque. O primeiro soco nessa janela causa mais dano e não pode ser defendido, porque você está de lado.

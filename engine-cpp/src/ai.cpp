@@ -46,7 +46,7 @@ void EnemyAI::reset(uint32_t charId) {
     tellBeats = 1;
     rockets = 0;
     lastPunchTimer = 0; sawPunch = false; rolledSkillDodge = false; defKind = defDelay = defHold = 0;
-    guardSaw = dodgeSaw = countering = inHit = false; hitsTaken = blocksInRow = calm = 0;
+    guardSaw = dodgeSaw = countering = inHit = false; hitsTaken = blocksInRow = calm = 0; sinceDodge = 100000;
 }
 
 // ---------------------------------------------------------------- defesa reativa
@@ -54,8 +54,9 @@ void EnemyAI::reset(uint32_t charId) {
 // Golpe pesado ou carregado pede mais esquiva; quem está apanhando em sequência fecha a guarda; especial só se evita esquivando.
 void EnemyAI::planDefense(const Fighter& enemy, const Fighter& player, int hitIn, bool canBlock) {
     const bool heavy = player.state == FIGHTER_HOOK || player.state == FIGHTER_UPPER || player.chargeRatio > 0.3f;
-    float dodge = !canBlock ? 1.0f : (heavy ? 0.55f : 0.3f);
+    float dodge = !canBlock ? 1.0f : (heavy ? 0.6f : 0.4f);
     if (canBlock && hitsTaken >= 2) dodge *= 0.5f;
+    if (canBlock && sinceDodge < 150) dodge *= 0.25f; // acabou de esquivar: agora prefere a guarda (duas esquivas seguidas giram o ringue demais)
     if (enemy.status.mud > 0) dodge = 0.0f; // na lama não dá para esquivar
     if (random01() < dodge) {
         defKind = 2;
@@ -77,6 +78,7 @@ void EnemyAI::startDefense(Fighter& enemy, uint32_t& audioEvents) {
         enemy.startMove(random01() > 0.5f ? FIGHTER_DODGE_L : FIGHTER_DODGE_R, 22);
         audioEvents |= AUDIO_SFX_DODGE;
     }
+    if (defKind == 2) sinceDodge = 0;
     defKind = 0; guardSaw = dodgeSaw = false;
 }
 
@@ -305,6 +307,7 @@ AiAction EnemyAI::update(Fighter& enemy, const Fighter& player, uint32_t frame, 
         canBlock = false;
     }
     if (enemy.state != FIGHTER_HIT) inHit = false;
+    if (sinceDodge < 100000) sinceDodge++;
     if (playerPunching || playerCasting) calm = 0; else if (++calm > 90) { hitsTaken = 0; blocksInRow = 0; }
 
     switch (enemy.state) {

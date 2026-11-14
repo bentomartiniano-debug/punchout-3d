@@ -80,6 +80,7 @@ constexpr uint32_t kPunchBits = INPUT_PUNCH_L | INPUT_PUNCH_R;
 constexpr int kCommandWindow = 72;       // 1,2 s de histórico para comandos
 constexpr int kBothPunchesWindow = 24;   // Z + X em até 400 ms
 constexpr int kChainGap = 40;            // quadros entre o fim de um soco do combo e o próximo antes de o combo esfriar
+constexpr float kChainPunchCost = 0.6f;  // fração do fôlego que custa o soco que carrega um espaço do combo
 constexpr int kFlowWindow = 60;          // quadros, depois de uma esquiva bem feita, em que um especial de fluxo sai sem combo
 constexpr int kHealCooldown = 8 * 60;
 
@@ -217,7 +218,7 @@ void GameEngine::update(uint32_t inputMask, float dt) {
     case STATE_GAME_OVER: {
         // O perdedor por nocaute escorrega para as cordas.
         Fighter& loser = (result == MatchResult::WinKO || result == MatchResult::WinTKO) ? enemy : player;
-        if (loser.state == FIGHTER_KNOCKDOWN && loser.radius < 232.0f) loser.radius += 2.5f;
+        if (loser.state == FIGHTER_KNOCKDOWN && loser.radius < 232.0f) loser.radius = std::min(232.0f, loser.radius + 4.0f); // arremessado: chega às cordas mais rápido que numa queda comum
         if (loser.state == FIGHTER_KNOCKDOWN && loser.radius >= 231.0f && koRopeFrame == 0) {
             koRopeFrame = frameIndex;
             cue(Sfx::CrowdGasp);
@@ -660,6 +661,12 @@ void GameEngine::executePunch(bool left, float charge, uint32_t held) {
         duration = static_cast<int>(std::round(duration * 0.75f)); // Fúria Anfíbia: 25% mais rápido
     }
 
+    // Variar compensa: o soco que carrega um espaço do combo (diferente dos que já estão nele) custa 40% menos fôlego.
+    // Repetir o mesmo soco paga o preço cheio.
+    const uint32_t chainBit = 1u << ((static_cast<uint32_t>(move) & 15u) * 2u + (left ? 1u : 0u));
+    const bool chainFresh = chain_ == 0 || !(chainSeen_ & chainBit);
+    if (chainFresh) cost *= kChainPunchCost;
+
     // Não bloqueia mais socos com baixa estamina / exaustão!
     // Se a estamina for insuficiente, o soco sai como "sluggish" (+85% mais lento e 30% do dano).
     if (f.stamina < cost || f.isExhausted) {
@@ -695,7 +702,7 @@ void GameEngine::executePunch(bool left, float charge, uint32_t held) {
     // combo de entrada: cada soco diferente dos que já estão no combo carrega um espaço (o mesmo golpe com a outra mão já conta como diferente).
     // Vale mesmo sem acertar; repetir um soco não carrega, só mantém o combo quente.
     {
-        const uint32_t bit = 1u << ((static_cast<uint32_t>(move) & 15u) * 2u + (left ? 1u : 0u));
+        const uint32_t bit = chainBit;
         if (chain_ == 0) chainSeen_ = 0;
         if (!(chainSeen_ & bit)) { chainSeen_ |= bit; chain_ = std::min(chain_ + 1, 3); }
         chainTimer_ = duration + kChainGap;
@@ -1066,6 +1073,7 @@ void GameEngine::triggerKnockdown(bool enemyDown, uint32_t& audio) {
         return;
     }
     Fighter& standing = enemyDown ? player : enemy;
+    koBySkill = standing.state == FIGHTER_SKILL;
     falling.signatureOnly = false; // queda interrompe a assinatura antes da reação nas cordas
     hitstopTimer = 0; // a queda já para a luta (a pausa do soco não pode sobrar para a volta)
     impactKind = 4; impactTimer = 40; impactSeed = static_cast<int>(frameIndex);
@@ -1533,7 +1541,10 @@ bool GameEngine::tryPlayerCommand(uint32_t held, uint32_t& audio) {
             continue;
         }
 
-        if (castSkill(player, enemy, id, false, audio)) {
+        chainCast_ = entry != SkillEntry::Quick;
+        const bool cast = castSkill(player, enemy, id, false, audio);
+        chainCast_ = false;
+        if (cast) {
             if (entry != SkillEntry::Quick) { chain_ = 0; flowWindow_ = 0; }
             commandHistory_.clear();
             cancelCharge();
@@ -1555,7 +1566,10 @@ bool GameEngine::castSkill(Fighter& caster, Fighter& target, SkillId id, bool si
     if (isHealSkill(id)) skillCost = 20.0f;
     if (def->type == SkillType::Mode) skillCost = 22.0f;
 
-    if (caster.isPlayer) {
+    if (caster.isPlayer && chainCast_) {
+        // lançado pelo combo de entrada (ou pela esquiva que abre o fluxo): os socos já pagaram, o especial não cobra de novo nem falha por falta de fôlego
+        caster.staminaRegenDelay = 30;
+    } else if (caster.isPlayer) {
         if (comboCount >= 3) {
             skillCost = 12.0f; // Bônus de Combo: custo reduzido de estamina!
             combat.spawnFloatingText("COMBO SKILL!", 0xffe600ff, caster.worldPos.x, caster.worldPos.y + 70.0f, caster.worldPos.z, true, 0);

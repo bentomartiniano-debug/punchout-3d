@@ -32,6 +32,7 @@ public:
     int defKind = 0, defDelay = 0, defHold = 0;      // defesa marcada: 1 guarda, 2 esquiva; quadros de reação; quanto segurar a guarda
     bool guardSaw = false, dodgeSaw = false;         // a guarda segurou / a esquiva evitou um golpe de verdade
     bool countering = false, inHit = false;          // o golpe atual é um contra-ataque; estava apanhando no quadro anterior
+    int sinceDodge = 100000;                         // quadros desde a última esquiva
     int hitsTaken = 0, blocksInRow = 0, calm = 0;    // golpes limpos seguidos que levou; socos seguidos na guarda; quadros sem o jogador atacar
     void planDefense(const Fighter& enemy, const Fighter& player, int hitIn, bool canBlock);
     void startDefense(Fighter& enemy, uint32_t& audioEvents);

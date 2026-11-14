@@ -335,6 +335,7 @@ void Renderer::begin(int w, int h, float a, const Fighter& pl, const Fighter& en
     { glm::vec3 e2 = eye, t2 = target; if (punch_ > 0.f) { t2 = glm::mix(target, punchAt_, punch_ * 0.6f); e2 = glm::mix(eye, punchAt_, punch_ * 0.38f); }
       e2 += kick_; t2 += kick_ * 0.45f; const glm::vec3 fwd = glm::normalize(t2 - e2), up = glm::angleAxis(kickRoll_, fwd) * glm::vec3(0, 1, 0);
       if (punch_ > 0.f || kickRoll_ != 0.f || kick_ != glm::vec3(0.f)) { eye_ = e2 + jolt; view_ = glm::lookAt(eye_, t2 + jolt, up); } }
+    if (skyK_ > 0.f) { const glm::vec3 fwd = glm::normalize(glm::mix(eye_ + glm::vec3(glm::inverse(view_) * glm::vec4(0, 0, -1, 0)) * glm::length(skyAt_ - eye_), skyAt_, skyK_) - eye_); view_ = glm::lookAt(eye_, eye_ + fwd, glm::vec3(0, 1, 0)); }   // segue quem foi arremessado para o céu
     // conferência por imagem: KORAMA3D_CAM="ox,oy,oz,ax,ay,az" olha de outro ponto
     if (camOn_) { eye_ = camEye_; view_ = glm::lookAt(camEye_, camAt_, glm::vec3(0, 1, 0)); }
     if (const char* cam = std::getenv("KORAMA3D_CAM")) { float v[6]; if (std::sscanf(cam, "%f,%f,%f,%f,%f,%f", v, v+1, v+2, v+3, v+4, v+5) == 6) { eye_ = glm::vec3(v[0],v[1],v[2]); view_ = glm::lookAt(eye_, glm::vec3(v[3],v[4],v[5]), glm::vec3(0,1,0)); } }
@@ -472,13 +473,13 @@ void Renderer::props(const std::vector<float>& verts, const std::vector<unsigned
     glCullFace(GL_BACK); glDisable(GL_CULL_FACE); prop_.set("uHull", 0); glDrawElements(GL_TRIANGLES, GLsizei(idx.size()), GL_UNSIGNED_INT, nullptr); }
     glEnable(GL_CULL_FACE); glBindVertexArray(0); st_ = {};
 }
-void Renderer::glow(const std::vector<float>& verts, const std::vector<unsigned>& idx) {
+void Renderer::glow(const std::vector<float>& verts, const std::vector<unsigned>& idx, bool overlay) {
     if (idx.empty()) return; props({}, {}, 0);   // garante o VAO das props
     glBindVertexArray(propVao_); glBindBuffer(GL_ARRAY_BUFFER, propVbo_); glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(verts.size() * sizeof(float)), verts.data(), GL_STREAM_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, propIbo_); glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(idx.size() * sizeof(unsigned)), idx.data(), GL_STREAM_DRAW);
     prop_.use(); prop_.set("uVP", proj_ * view_); prop_.set("uHull", 0); prop_.set("uAlpha", 1.f);
-    glDisable(GL_CULL_FACE); glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glDepthMask(GL_FALSE); glDrawElements(GL_TRIANGLES, GLsizei(idx.size()), GL_UNSIGNED_INT, nullptr);
-    glDepthMask(GL_TRUE); glDisable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glEnable(GL_CULL_FACE); glBindVertexArray(0); st_ = {};
+    glDisable(GL_CULL_FACE); glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glDepthMask(GL_FALSE); if (overlay) glDisable(GL_DEPTH_TEST); glDrawElements(GL_TRIANGLES, GLsizei(idx.size()), GL_UNSIGNED_INT, nullptr);
+    if (overlay) glEnable(GL_DEPTH_TEST); glDepthMask(GL_TRUE); glDisable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); glEnable(GL_CULL_FACE); glBindVertexArray(0); st_ = {};
 }
 void Renderer::effects(Model& m, float t) {   // efeitos gravados do vinil: o mundo, a cor e a visibilidade de cada nó já vêm do tocador
     rim_ = 0.2f; paint_ = 0.f; hatchR_ = 0.f; time_ = t; sect_ = nullptr; drawTree(m);

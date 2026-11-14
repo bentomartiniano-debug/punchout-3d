@@ -153,7 +153,7 @@ void saveBuilds(const std::filesystem::path& file, const Builds& b) {
 // efeitos de golpe dos dois lutadores (vinil, ondas, gêiseres, língua, cuspidas, mel, ferrão, estacas, nuvens): a luta usa e o replay grava uma cópia por quadro
 struct FxSet {
     FxPlayer fxP, fxE; WaveFx waveP, waveE; TongueFx tongueP, tongueE; GeyserFx geyP, geyE; CloudFx cloudP, cloudE; StabFx stabP, stabE; StingFx stingP, stingE; SpitFx spitP, spitE; HoneyFx honeyP, honeyE;
-    BeeFx beeP, beeE; MeltFx meltP, meltE; ConeFx coneP, coneE; BubbleFx bubP, bubE; LaserFx lasP, lasE; JetFx jetP, jetE; SyrupFx syrP, syrE; HeatFx heatP, heatE;   // especiais refeitos em código (render/char_fx.hpp)
+    BeeFx beeP, beeE; MeltFx meltP, meltE; ConeFx coneP, coneE; BubbleFx bubP, bubE; LaserFx lasP, lasE; JetFx jetP, jetE; SyrupFx syrP, syrE; HeatFx heatP, heatE; KoFx koP, koE;   // koP/koE: o nocaute final de cada um (arremessado ou para a estratosfera)   // especiais refeitos em código (render/char_fx.hpp)
     float poisonP = 0.f, poisonE = 0.f;   // Pele Venenosa
     glm::vec3 warnAt{0.f}; float warnK = 0.f, warnSize = 1.f;   // especial do oponente sendo armado: marca no chão nos pés do jogador (0..1 = quanto falta)
 };
@@ -288,20 +288,24 @@ int main(int argc, char** argv) {
         // soco reto: enquanto o oponente está no soco ou no especial, ele fica no lugar e na direção em que começou. Se a jogadora esquiva (o ringue gira
         // com ela e com a câmera), o golpe passa reto e ela aparece de lado para ele; quando o golpe acaba ele gira e volta a ficar de frente. No aviso
         // (antes do soco) ele ainda acompanha. É só desenho: o acerto continua decidido pelo motor.
+        float turnLagP = 0.f;   // o mesmo para o jogador: no meio de um soco ou especial ele não gira com a esquiva do oponente (termina o golpe em linha reta), e a câmera fica com ele
         float turnLagE = 0.f, ringPrev = 0.f, yawOffP = 0.f, yawOffE = 0.f;   // turnLagE: quanto o oponente ficou para trás do giro do ringue; yawOff: giro de cada um por cima da direção do motor
         const auto tickSmooth = [&](bool reset) {
-            const float ring = engine.ringAngle; if (reset) { turnLagE = yawOffP = yawOffE = 0.f; ringPrev = ring; }
+            const float ring = engine.ringAngle; if (reset) { turnLagE = turnLagP = yawOffP = yawOffE = 0.f; ringPrev = ring; }
             const float d = ring - ringPrev; ringPrev = ring;
             const Fighter& e = engine.enemy; const bool committed = engine.gameState == STATE_FIGHTING && (isPunchState(e.state) || e.state == FIGHTER_SKILL);
             if (committed) turnLagE = std::clamp(turnLagE - d, -1.75f, 1.75f); else { turnLagE *= 0.86f; if (std::fabs(turnLagE) < 0.002f) turnLagE = 0.f; }
+            const Fighter& pl = engine.player; const bool committedP = engine.gameState == STATE_FIGHTING && ((isPunchState(pl.state) && !pl.hasHit) || (pl.state == FIGHTER_SKILL && !pl.skillEventDone));   // só até o golpe bater: na volta do braço ele já se vira de novo (senão quem emenda socos nunca realinha)
+            if (committedP) turnLagP = std::clamp(turnLagP - d, -1.75f, 1.75f); else { turnLagP *= 0.8f; if (std::fabs(turnLagP) < 0.002f) turnLagP = 0.f; }
             Fighter fp = engine.player, fe = e;
+            if (turnLagP != 0.f) { const float r = std::hypot(fp.worldPos.x, fp.worldPos.z), a = std::atan2(fp.worldPos.x, fp.worldPos.z) + turnLagP; fp.worldPos.x = r * std::sin(a); fp.worldPos.z = r * std::cos(a); }
             if (turnLagE != 0.f) { const float r = std::hypot(fe.worldPos.x, fe.worldPos.z), a = std::atan2(fe.worldPos.x, fe.worldPos.z) + turnLagE; fe.worldPos.x = r * std::sin(a); fe.worldPos.z = r * std::cos(a); }
             // cada um olha para onde o outro está de fato; o oponente no golpe mantém a direção que tinha
             const auto wrap = [](float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; };
             const glm::vec3 pp = rigPos(fp), pe = rigPos(fe); const glm::vec2 dir(pe.x - pp.x, pe.z - pp.z); const bool far = glm::length(dir) > 0.05f;
             const float wantP = far ? wrap(std::atan2(-dir.x, dir.y) - fp.facing) : 0.f, wantE = far ? wrap(std::atan2(dir.x, -dir.y) - fe.facing) : 0.f;
-            yawOffP += (wantP - yawOffP) * 0.3f; if (committed) yawOffE = wrap(yawOffE - d); else yawOffE += (wantE - yawOffE) * 0.3f;
-            if (turnLagE == 0.f && !committed) { if (std::fabs(yawOffP) < 0.002f) yawOffP = 0.f; if (std::fabs(yawOffE) < 0.002f) yawOffE = 0.f; }
+            if (committedP) yawOffP = wrap(yawOffP - d); else yawOffP += (wantP - yawOffP) * 0.3f; if (committed) yawOffE = wrap(yawOffE - d); else yawOffE += (wantE - yawOffE) * 0.3f;
+            if (turnLagE == 0.f && turnLagP == 0.f && !committed && !committedP) { if (std::fabs(yawOffP) < 0.002f) yawOffP = 0.f; if (std::fabs(yawOffE) < 0.002f) yawOffE = 0.f; }
             fp.facing += yawOffP; fe.facing += yawOffE;
             smoothP.tick(fp); smoothE.tick(fe); };
         const auto startFight = [&]() {
@@ -309,12 +313,14 @@ int main(int argc, char** argv) {
             endFrames = 0; celebrated = false;
             if (audioOn && !previewing) { audio.setFightPaused(false); audio.stopVersusSounds(); audio.stopFightSounds(); audio.setMusicPitch(1.f); audio.setMusicDuck(1.f); audio.play(Sfx::Bell); audio.play(Sfx::AnnouncerKorama); audio.setMusic(charTrack(engine.enemy.charId, engine.enemy.bossStage)); }
             if (snap && std::getenv("KORAMA3D_WEAK_PLAYER")) engine.player.hp = 3.f;   // conferência: a jogadora cai no primeiro golpe
+            if (snap && std::getenv("KORAMA3D_LAST_KD_P")) engine.playerKnockdowns = GameEngine::kKnockdownsForTko - 1;   // conferência: a próxima queda do jogador encerra a luta
+            if (snap && std::getenv("KORAMA3D_NODEF")) engine.ai.defenseChance = 0.f;   // conferência: o oponente não defende nem esquiva
             if (const char* ring = snap ? std::getenv("KORAMA3D_RING") : nullptr) engine.ringAngle = float(std::atof(ring));   // conferência: ângulo do ringue (quina em 0,785)
             if (snap && std::getenv("KORAMA3D_WEAK_ENEMY")) engine.enemy.hp = 5.f;
             if (const char* pk = snap ? std::getenv("KORAMA3D_PASSIVE") : nullptr) if (const SkillDef* d = SkillSystem::getByKey(pk)) engine.player.loadout.passive = d->id;   // conferência: passiva do jogador
             if (snap && std::getenv("KORAMA3D_LAST_KD")) engine.enemyKnockdowns = GameEngine::kKnockdownsForTko - 1;   // conferência: a próxima queda encerra a luta   // conferência: derruba a oponente no primeiro golpe
             arena = &modelOf(std::string("arena_") + kArenas[charE]); ropes = {}; rend.setArena(*arena, ropes);
-            downP = downE = riseP = pull = 0; impact = {}; sparks.clear(); rec.clear(); recHit = false; replayT = -1; replayDone = false; shot = -1; finisher = -1; shakeExtra = 0.f; downPrev = false; shockProg = 2.f; kickT = -1; skillFx.reset(); speedLines.reset(); smP = {}; smE = {}; smearReady = false; fxP = {}; fxE = {}; waveP = {}; waveE = {}; leapP = {}; leapE = {}; tongueP.reset(); tongueE.reset(); geyP.reset(); geyE.reset(); cloudP.reset(); cloudE.reset(); stabP.reset(); stabE.reset(); stingP.reset(); stingE.reset(); spitP.reset(); spitE.reset(); honeyP = {}; honeyE = {}; fxs.beeP = {}; fxs.beeE = {}; fxs.meltP = {}; fxs.meltE = {}; fxs.coneP = {}; fxs.coneE = {}; fxs.bubP = {}; fxs.bubE = {}; fxs.lasP = {}; fxs.lasE = {}; fxs.jetP = {}; fxs.jetE = {}; fxs.syrP = {}; fxs.syrE = {}; fxs.heatP = {}; fxs.heatE = {}; celebF = -1; throws.clear(); rend.setFlash(glm::vec3(0.f), 0.f); feetP = {}; feetE = {}; lagP = {}; lagE = {}; clothP = {}; clothE = {}; bounceP = {}; bounceE = {}; ropePrev = 0; mashPrev = 0; freeze = 0; stopPrev = 0; pending = 0;
+            downP = downE = riseP = pull = 0; impact = {}; sparks.clear(); rec.clear(); recHit = false; replayT = -1; replayDone = false; shot = -1; finisher = -1; shakeExtra = 0.f; downPrev = false; shockProg = 2.f; kickT = -1; skillFx.reset(); speedLines.reset(); smP = {}; smE = {}; smearReady = false; fxP = {}; fxE = {}; waveP = {}; waveE = {}; leapP = {}; leapE = {}; tongueP.reset(); tongueE.reset(); geyP.reset(); geyE.reset(); cloudP.reset(); cloudE.reset(); stabP.reset(); stabE.reset(); stingP.reset(); stingE.reset(); spitP.reset(); spitE.reset(); honeyP = {}; honeyE = {}; fxs.beeP = {}; fxs.beeE = {}; fxs.meltP = {}; fxs.meltE = {}; fxs.coneP = {}; fxs.coneE = {}; fxs.bubP = {}; fxs.bubE = {}; fxs.lasP = {}; fxs.lasE = {}; fxs.jetP = {}; fxs.jetE = {}; fxs.syrP = {}; fxs.syrE = {}; fxs.heatP = {}; fxs.heatE = {}; fxs.koP = {}; fxs.koE = {}; celebF = -1; throws.clear(); rend.setFlash(glm::vec3(0.f), 0.f); feetP = {}; feetE = {}; lagP = {}; lagE = {}; clothP = {}; clothE = {}; bounceP = {}; bounceE = {}; ropePrev = 0; mashPrev = 0; freeze = 0; stopPrev = 0; pending = 0;
             smoothP.ready = smoothE.ready = false; tickSmooth(true); hpP = engine.player.hp; hpE = engine.enemy.hp; springP = {}; springE = {}; wobP = {}; wobE = {}; hurtP = hurtE = 0;
         };
         const auto step = [&](uint32_t mask) {
@@ -359,7 +365,8 @@ int main(int argc, char** argv) {
             { const MatchResult r = engine.result; const bool ko = engine.isMatchOver() && (r == MatchResult::WinKO || r == MatchResult::WinTKO || r == MatchResult::LossKO || r == MatchResult::LossTKO);
               const bool downNow = engine.gameState == STATE_KNOCKDOWN || ko;
               if (downNow && !downPrev) { const bool enemyFell = engine.gameState == STATE_KNOCKDOWN ? engine.enemyIsDown : (r == MatchResult::WinKO || r == MatchResult::WinTKO);
-                  finisher = 0; freeze = kFinisherFreeze; impact.spawn(4, ++hitCount, enemyFell); if (ko) recHit = true; if (audioOn) audio.play(Sfx::CameraFlash); }
+                  finisher = 0; freeze = kFinisherFreeze; impact.spawn(4, ++hitCount, enemyFell); if (ko) recHit = true;
+                  if (ko) { if (enemyFell) fxs.koE.start(engine.koBySkill, engine.enemy, smoothE.pos, rend.eyePos(), fighterModel(engine.enemy).scale); else fxs.koP.start(engine.koBySkill, engine.player, smoothP.pos, rend.eyePos(), fighterModel(engine.player).scale); }   /* nocaute final: arremessado, ou para a estratosfera se foi um especial */ if (audioOn) audio.play(Sfx::CameraFlash); }
               downPrev = downNow; }
             if (engine.hitstopTimer == 0 && freeze == 0) { springP.tick(); springE.tick(); if (hurtP > 0) hurtP--; if (hurtE > 0) hurtE--;
                 for (ImpactSpring* w : {&wobP, &wobE}) { w->v += -0.05f * w->s; w->v *= 0.93f; w->s += w->v; } }   // balança umas três vezes antes de parar
@@ -370,16 +377,16 @@ int main(int argc, char** argv) {
             if (kd && !engine.enemyIsDown && engine.mashProgress > mashPrev) bounceP.kick(0.35f);
             mashPrev = engine.mashProgress;
             riseP = approach(riseP, kd && !engine.enemyIsDown ? (snap && std::getenv("KORAMA3D_RISE") ? 1.f : mash) : 0.f, 0.08f);   // KORAMA3D_RISE: conferência, como se apertasse sem parar   // apertar para levantar vira esforço, não meia-pose de pé
-            downP = approach(downP, (kd && !engine.enemyIsDown) || pLost ? 1.f : 0.f, 0.05f); downE = approach(downE, (kd && engine.enemyIsDown) || eLost ? 1.f : 0.f, 0.05f);
+            downP = approach(downP, ((kd && !engine.enemyIsDown) || pLost) && !fxs.koP.blast() ? 1.f : 0.f, 0.05f); downE = approach(downE, ((kd && engine.enemyIsDown) || eLost) && !fxs.koE.blast() ? 1.f : 0.f, 0.05f);
             pull = approach(pull, downP > 0.f ? 1.f : 0.f, 0.03f);
             // bateu nas cordas: rebate para a frente e volta balançando
-            if (engine.koRopeFrame != 0 && ropePrev == 0) { if (downP >= downE) bounceP.kick(1.f); else bounceE.kick(1.f); sparks.burst((downP >= downE ? smoothP.pos : smoothE.pos) + glm::vec3(0, 0.9f, 0), 1, uint32_t(++hitCount)); shakeExtra = std::max(shakeExtra, 22.f); }
+            if (engine.koRopeFrame != 0 && ropePrev == 0 && !fxs.koP.blast() && !fxs.koE.blast()) { if (downP >= downE) bounceP.kick(1.f); else bounceE.kick(1.f); sparks.burst((downP >= downE ? smoothP.pos : smoothE.pos) + glm::vec3(0, 0.9f, 0), 1, uint32_t(++hitCount)); shakeExtra = std::max(shakeExtra, 22.f); }
             ropePrev = engine.koRopeFrame; bounceP.tick(); bounceE.tick();
             // quem encosta nas cordas é o tronco; escorado, ele empurra mais
             // cada corda vê o tronco na altura dela: escorado, ele inclina para trás (vai mais para fora em cima); o tranco nas cordas o traz de volta
             const auto torso = [&](const PoseSmoother& f, float d, float rebound, const Model& m) { const glm::vec3 p = f.pos; const glm::vec2 out = glm::normalize(glm::vec2(p.x, p.z) + glm::vec2(1e-4f));
                 RopeBody b; b.base = glm::vec2(p.x, p.z) - out * (0.32f * rebound * d); b.lean = out * (0.48f * d); b.r = ropeRadius(m); return b; };
-            const RopeBody bodies[2] = {torso(smoothP, downP, bounceP.s, fighterModel(engine.player)), torso(smoothE, downE, bounceE.s, fighterModel(engine.enemy))}; ropes.tick(bodies, 2);
+            RopeBody bodies[2] = {torso(smoothP, downP, bounceP.s, fighterModel(engine.player)), torso(smoothE, downE, bounceE.s, fighterModel(engine.enemy))}; if (fxs.koP.blast()) bodies[0].r = 0.f; if (fxs.koE.blast()) bodies[1].r = 0.f; /* quem foi para o céu não encosta nas cordas */ ropes.tick(bodies, 2);
             Model& mP = fighterModel(engine.player); Model& mE = fighterModel(engine.enemy); const RigRest& restP = restFor(mP); const RigRest& restE = restFor(mE);
             PoseCtx cP, cE; cP.reachLimit = reachOf(smoothP, smoothE, springE.s, mP.num("gloveTip", 0.2f) * mP.scale); cE.reachLimit = reachOf(smoothE, smoothP, springP.s, mE.num("gloveTip", 0.2f) * mE.scale); cP.hangT = cE.hangT = float(engine.frameIndex); cP.ropeBounce = bounceP.s; cP.rise = riseP; cE.ropeBounce = bounceE.s; cP.ropeTop = cE.ropeTop = ropes.heights[std::max(0, ropes.rows - 1)]; cP.hasPos = cE.hasPos = true; cP.pos = smoothP.pos; cE.pos = smoothE.pos; cP.squash = springP.s; cE.squash = springE.s;
             tongueP.tick(engine.player); tongueE.tick(engine.enemy);
@@ -393,13 +400,14 @@ int main(int argc, char** argv) {
               poseP = computePose(vP, restP, downP, cP); poseE = computePose(vE, restE, downE, cE); poseP.twist += tongueP.twist(); poseE.twist += tongueE.twist();
               for (auto [sp, q] : {std::pair<const SpitFx*, FighterPose*>{&spitP, &poseP}, {&spitE, &poseE}}) if (sp->on()) { if (sp->style == SpitFx::kCherry) { const float i = sp->inflate(); q->headScale *= glm::vec3(1.f + 0.14f * i, 1.f + 0.06f * i, 1.f + 0.12f * i); }
                   const SpitFx::Body b = sp->body(); q->lean += b.lean; q->neckTilt += b.neck; q->root = q->root * glm::scale(glm::mat4(1.f), b.scale); }   // o corpo acompanha a carga e a cuspida   // Cremoso: a cabeça incha com a cereja
-              fxs.meltP.apply(poseP); fxs.meltE.apply(poseE);   // Cremoso derretido: o corpo achata
+              fxs.meltP.apply(poseP); fxs.meltE.apply(poseE); fxs.koP.apply(poseP); fxs.koE.apply(poseE);   // nocaute final: pelo ar
+                // Cremoso derretido: o corpo achata
               if (lP) poseP.root = poseP.root * glm::scale(glm::mat4(1.f), shP.scale); if (lE) poseE.root = poseE.root * glm::scale(glm::mat4(1.f), shE.scale); } poseP.gloveOpen = smoothP.open; poseE.gloveOpen = smoothE.open; for (int i = 0; i < 2; i++) { poseP.gloveSpin[i] = smoothP.spin[i]; poseE.gloveSpin[i] = smoothE.spin[i]; }
             feetP.tick(poseP, restP); feetE.tick(poseE, restE);
             lagP.tick(glm::vec3(poseP.root * glm::vec4(poseP.upperPos, 1))); lagE.tick(glm::vec3(poseE.root * glm::vec4(poseE.upperPos, 1)));
             { const float t = float(engine.frameIndex) / 60.f; clothP.tick(glm::vec3(poseP.root * glm::vec4(poseP.upperPos, 1)), poseP.root, poseP.twist, t); clothE.tick(glm::vec3(poseE.root * glm::vec4(poseE.upperPos, 1)), poseE.root, poseE.twist, t + 1.3f); }
             // o ponto do golpe é a ponta da luva de quem bateu, no momento do acerto
-            if (impact.alive && !impact.placed) { const Fighter& atk = impact.byPlayer ? engine.player : engine.enemy; const FighterPose& pa = impact.byPlayer ? poseP : poseE; const glm::vec3 g = pa.glove[atk.isLeftPunch ? 1 : 0]; impact.at = glm::vec3(pa.root * glm::vec4(g.x, g.y, g.z + (impact.byPlayer ? mP : mE).num("gloveTip", 0.2f), 1)); if (StabFx::active(atk) || SpitFx::active(atk)) impact.at = glm::vec3((impact.byPlayer ? poseE : poseP).root[3]) + glm::vec3(0, 0.9f, 0); /* estacas: o golpe é no rival */ impact.placed = true; sparks.burst(impact.at, impact.kind, uint32_t(impact.seed));
+            if (impact.alive && !impact.placed) { const Fighter& atk = impact.byPlayer ? engine.player : engine.enemy; const FighterPose& pa = impact.byPlayer ? poseP : poseE; const glm::vec3 g = pa.glove[atk.isLeftPunch ? 1 : 0]; impact.at = glm::vec3(pa.root * glm::vec4(g.x, g.y, g.z + (impact.byPlayer ? mP : mE).num("gloveTip", 0.2f), 1)); if (StabFx::active(atk) || SpitFx::active(atk) || ConeFx::active(atk) || SyrupFx::active(atk) || LaserFx::active(atk) || CloudFx::active(atk)) impact.at = glm::vec3((impact.byPlayer ? poseE : poseP).root[3]) + glm::vec3(0, 0.9f, 0); /* estacas: o golpe é no rival */ else if (atk.state == FIGHTER_SKILL) { const glm::vec3 tgt = glm::vec3((impact.byPlayer ? poseE : poseP).root[3]) + glm::vec3(0, 0.9f, 0); if (glm::length(impact.at - tgt) > 0.75f) impact.at = tgt; }   /* especial à distância (nuvem, raio, jorro): o estouro é no rival, não na mão de quem lança */ impact.placed = true; sparks.burst(impact.at, impact.kind, uint32_t(impact.seed));
                 { const float amp = impact.kind == 0 ? 0.25f : impact.kind == 1 ? 0.8f : impact.kind == 4 ? 1.6f : 1.1f;   // golpe forte: a câmera balança na direção dele
                   if (amp >= kickAmp * std::exp(-0.16f * float(std::max(kickT, 0))) || kickT < 0) { kickT = 0; kickAmp = amp; const glm::vec3 d = smoothE.pos - smoothP.pos; kickDir = glm::normalize(glm::vec3(d.x, 0.f, d.z) + glm::vec3(0, 0, 1e-4f)) * (impact.byPlayer ? 1.f : -1.f); } }
                 if (impact.kind >= 2) { shockProg = 0.f; shockStr = impact.kind == 4 ? 1.f : impact.kind == 2 ? 0.85f : 0.65f; shockAt = impact.at; }   // contra-ataque, brecha e queda: onda de choque
@@ -435,11 +443,12 @@ int main(int argc, char** argv) {
               honeyP.tick(engine.player, bP.glove[0], bP.glove[1], sparks, bP.feet); honeyE.tick(engine.enemy, bE.glove[0], bE.glove[1], sparks, bE.feet);   /* melaço e geleia do Jack */
               fxs.beeP.tick(engine.player, engine.enemy, bP.glove[0], bP.glove[1], bE.head, bE.chest, bP.size, sparks); fxs.beeE.tick(engine.enemy, engine.player, bE.glove[0], bE.glove[1], bP.head, bP.chest, bE.size, sparks);   /* abelhas da Infestação */
               fxs.meltP.tick(engine.player, engine.enemy, bP.feet, bP.fwd, bE.feet, bP.size); fxs.meltE.tick(engine.enemy, engine.player, bE.feet, bE.fwd, bP.feet, bE.size);   /* Cremoso derretido e a poça de calda */
-              fxs.coneP.tick(engine.player, bP.glove[1], bP.fwd, bE.chest, bP.size, sparks); fxs.coneE.tick(engine.enemy, bE.glove[1], bE.fwd, bP.chest, bE.size, sparks);   /* casquinha */
+              fxs.coneP.tick(engine.player, bP.glove[0], bP.fwd, bE.chest, bP.size, sparks); fxs.coneE.tick(engine.enemy, bE.glove[0], bE.fwd, bP.chest, bE.size, sparks);   /* glove[0] é a luva direita, a que estoca */   /* casquinha */
               fxs.bubP.tick(engine.player, bP.feet, bP.size); fxs.bubE.tick(engine.enemy, bE.feet, bE.size);   /* escudo do Marcov */
               fxs.lasP.tick(engine.player, bE.feet, bP.fwd, bP.size, sparks); fxs.lasE.tick(engine.enemy, bP.feet, bE.fwd, bE.size, sparks);   /* raio orbital */
               fxs.syrP.tick(engine.player, bP.glove[0], bP.glove[1], bP.fwd, bE.chest, bP.size, sparks); fxs.syrE.tick(engine.enemy, bE.glove[0], bE.glove[1], bE.fwd, bP.chest, bE.size, sparks);   /* calda quente */
               fxs.heatP.tick(engine.player, bP.feet, bP.size, sparks); fxs.heatE.tick(engine.enemy, bE.feet, bE.size, sparks);   /* escudo de calor */
+              fxs.koP.tick(engine.player, sparks); fxs.koE.tick(engine.enemy, sparks); if ((fxs.koP.justStar || fxs.koE.justStar) && audioOn) audio.play(Sfx::Parry);   /* nocaute final; o tilintar da estrelinha */
               fxs.jetP.tick(engine.player, bP.chest, bP.fwd, bP.size, sparks); fxs.jetE.tick(engine.enemy, bE.chest, bE.fwd, bE.size, sparks);   /* turbinas */
               for (const SpitFx* sp : {&spitP, &spitE}) if (sp->justHit) { engine.hitstopTimer = std::max(engine.hitstopTimer, 9); shakeExtra = std::max(shakeExtra, 22.f); if (sp->style == SpitFx::kCherry) impact.spawn(1, ++hitCount, sp == &spitP); }   /* a cuspida chega com peso */
               skillFx.tick(0, engine.player, bP, bE, sparks, clipP || waveInP || LeapFx::isLeap(engine.player) || TongueFx::active(engine.player) || GeyserFx::active(engine.player) || CloudFx::active(engine.player) || StabFx::active(engine.player) || StingFx::active(engine.player) || SpitFx::active(engine.player) || BeeFx::casting(engine.player) || LaserFx::active(engine.player) || (engine.player.charId == 0 && engine.player.activeSkill == SkillId::JackHoneyWall), ownP); skillFx.tick(1, engine.enemy, bE, bP, sparks, clipE || waveInE || LeapFx::isLeap(engine.enemy) || TongueFx::active(engine.enemy) || GeyserFx::active(engine.enemy) || CloudFx::active(engine.enemy) || StabFx::active(engine.enemy) || StingFx::active(engine.enemy) || SpitFx::active(engine.enemy) || BeeFx::casting(engine.enemy) || LaserFx::active(engine.enemy) || (engine.enemy.charId == 0 && engine.enemy.activeSkill == SkillId::JackHoneyWall), ownE);
@@ -454,12 +463,13 @@ int main(int argc, char** argv) {
                       sm.glove[g] = ease(sm.glove[g], out ? d * smoothstep01((L - 0.02f) / 0.035f) : glm::vec3(0.f)); }
                   };
               smearOf(smP, 0, engine.player, bP); smearOf(smE, 1, engine.enemy, bE); smearReady = true;
-              speedLines.tick(0, engine.player, bP, sparks, false); speedLines.tick(1, engine.enemy, bE, sparks, false); }   // o corpo fica com as linhas de movimento clássicas
+              { static float ringSeen = 0.f; const bool turning = std::fabs(engine.ringAngle - ringSeen) > 0.003f || turnLagP != 0.f; ringSeen = engine.ringAngle; const auto dodging = [](const Fighter& f) { return f.state == FIGHTER_DODGE_L || f.state == FIGHTER_DODGE_R; };
+                speedLines.tick(0, engine.player, bP, sparks, false, !turning || dodging(engine.player)); speedLines.tick(1, engine.enemy, bE, sparks, false, !turning || dodging(engine.enemy)); } }   // o corpo fica com as linhas de movimento clássicas
             // grava o quadro para o replay (a luta e o voo depois do nocaute)
             if ((!snap || std::getenv("KORAMA3D_REPLAY")) && replayT < 0 && (!engine.isMatchOver() || endFrames <= 110)) {
                 const auto localLag = [](const LagSpring& l, const FighterPose& q) { return glm::vec3(glm::inverse(q.root) * glm::vec4(l.o, 0)); };
                 ReplayFrame fr; fr.pP = poseP; fr.pE = poseE; fr.lagP = localLag(lagP, poseP); fr.lagE = localLag(lagE, poseE); fr.cP = clothP; fr.cE = clothE; fr.ropes = ropes; fr.parts = sparks.list;
-                fr.faceP = faceNow(engine.player, downP, tongueP.mouth(), hurtP); fr.faceE = faceNow(engine.enemy, downE, tongueE.mouth(), hurtE);
+                fr.faceP = faceNow(engine.player, fxs.koP.blast() ? 1.f : downP, tongueP.mouth(), hurtP); fr.faceE = faceNow(engine.enemy, fxs.koE.blast() ? 1.f : downE, tongueE.mouth(), hurtE);
                 fr.wobP = wobP.s * (1.f - downP); fr.wobE = wobE.s * (1.f - downE); fr.dirP = float(engine.player.hitDir); fr.dirE = float(engine.enemy.hitDir); fr.t60 = float(engine.frameIndex) / 60.f; fr.impact = impact; fr.sounds = engine.sounds; fr.fx = fxs; for (HoneyFx* h : {&fr.fx.honeyP, &fr.fx.honeyE}) { h->faceV = {}; h->faceI = {}; } fr.hit = recHit; recHit = false;
                 rec.push_back(std::move(fr)); if (rec.size() > kReplayFrames) rec.pop_front(); }
         };
@@ -511,7 +521,8 @@ int main(int argc, char** argv) {
               S.meltP.build(cv, ci); S.meltE.build(cv, ci); S.coneP.build(cv, ci); S.coneE.build(cv, ci); S.beeP.build(cv, ci, cw, cwi); S.beeE.build(cv, ci, cw, cwi); S.lasP.build(cv, ci, cg, cgi); S.lasE.build(cv, ci, cg, cgi); S.jetP.build(cv, ci); S.jetE.build(cv, ci); S.syrP.build(cv, ci); S.syrE.build(cv, ci); S.heatP.build(cv, ci, cg, cgi); S.heatE.build(cv, ci, cg, cgi);
               if (!ci.empty()) rend.props(cv, ci, undiesTex); if (!cwi.empty()) rend.props(cw, cwi, undiesTex, 0.6f);
               for (const BubbleFx* bb : {&S.bubP, &S.bubE}) if (bb->on()) { bf.clear(); bfi.clear(); bl.clear(); bli.clear(); bb->build(rend.eyePos(), bf, bfi, bl, bli, cg, cgi); rend.props(bf, bfi, undiesTex, bb->fillAlpha()); rend.props(bl, bli, undiesTex, bb->lineAlpha()); }
-              if (!cgi.empty()) rend.glow(cg, cgi); }
+              if (!cgi.empty()) rend.glow(cg, cgi);
+              cg.clear(); cgi.clear(); S.koP.build(rend.eyePos(), cg, cgi); S.koE.build(rend.eyePos(), cg, cgi); if (!cgi.empty()) rend.glow(cg, cgi, true); }   // a estrelinha do nocaute, por cima do cenário
             if (stingP.on() || stingE.on()) { stabV.clear(); stabI.clear(); stingP.build(stabV, stabI); stingE.build(stabV, stabI); rend.glow(stabV, stabI); }   // ferrão de luz da Agulhada Rainha
             if (stabP.on() || stabE.on() || spitP.on() || spitE.on()) { stabV.clear(); stabI.clear(); stabP.build(stabV, stabI); stabE.build(stabV, stabI); spitP.build(stabV, stabI); spitE.build(stabV, stabI); rend.props(stabV, stabI, undiesTex); }   // estacas de rocha e gelo
         };
@@ -549,8 +560,9 @@ int main(int argc, char** argv) {
               { const float t = float(std::max(kickT, 0)), env = kickT < 0 ? 0.f : kickAmp * std::exp(-0.16f * t);   /* mola amortecida: tranco, volta e assenta */
                 rend.setCameraKick(kickDir * (0.1f * std::sin(t * 0.75f) * env) + glm::vec3(0, 0.05f * std::sin(t * 0.95f + 1.1f) * env, 0), 0.035f * std::sin(t * 0.6f) * env); }
               float chroma = std::min(0.022f, (engine.screenShake + shakeExtra) * 0.0009f); if (engine.gameState == STATE_KNOCKDOWN) chroma = std::max(chroma, 0.008f); if (f >= 0 && f < kFinisherFreeze) chroma = std::max(chroma, 0.012f); rend.setChroma(chroma); }
-            rend.begin(W, H, engine.ringAngle, engine.player, engine.enemy, mP.scale, mE.scale, topOf(mP), topOf(mE), engine.screenShake + shakeExtra, engine.frameIndex, pull, smoothP.pos); 
-            drawFighters(fxs, mP, mE, drawP, drawE, lagPL, lagEL, clothP, clothE, t60, faceNow(engine.player, downP, tongueP.mouth(), hurtP), faceNow(engine.enemy, downE, tongueE.mouth(), hurtE), celeb ? nullptr : &smP, celeb ? nullptr : &smE);
+            { const KoFx& kb = fxs.koE.blast() ? fxs.koE : fxs.koP; rend.setSkyLook(kb.lookAt(), kb.lookK()); }   // nocaute para a estratosfera: a câmera acompanha
+            rend.begin(W, H, engine.ringAngle + turnLagP, engine.player, engine.enemy, mP.scale, mE.scale, topOf(mP), topOf(mE), engine.screenShake + shakeExtra, engine.frameIndex, pull, smoothP.pos); 
+            drawFighters(fxs, mP, mE, drawP, drawE, lagPL, lagEL, clothP, clothE, t60, faceNow(engine.player, fxs.koP.blast() ? 1.f : downP, tongueP.mouth(), hurtP), faceNow(engine.enemy, fxs.koE.blast() ? 1.f : downE, tongueE.mouth(), hurtE), celeb ? nullptr : &smP, celeb ? nullptr : &smE);
             rend.arena(*arena, t60); rend.ropes(ropes);
             drawFxAfter(fxs, mP, mE, drawP, drawE);
             if (celeb) { throws.build(propV, propI, t60); rend.props(propV, propI, undiesTex); }   // o que a torcida jogou
@@ -588,7 +600,7 @@ int main(int argc, char** argv) {
                 if (p.chainNeed > 0 && (p.chainCount > 0 || flow) && rend.project(glm::vec3(drawP.root[3]) + glm::vec3(0, topOf(mP) + 0.05f, 0), W, H, sp)) drawChainPips(win, sp - glm::vec2(0.f, 10.f), flow ? 2 : p.chainCount, p.chainNeed, flow ? sf::Color(0, 229, 255) : sf::Color(255, 225, 0)); }
             if (celeb) {
                 if (hud2d && celebF >= kCardDelay) { const sf::Vector2i m = sf::Mouse::getPosition(win); hud2d->uiMouse = {float(m.x) * 1600.f / float(W), float(m.y) * 900.f / float(H)}; hud2d->drawResultCard(win, engine, celebF - kCardDelay); }
-            } else if (hud2d) hud2d->drawHudOnly(win, engine, false); else hud(win, font, engine);
+            } else if (hud2d && !(snap && std::getenv("KORAMA3D_NOHUD"))) hud2d->drawHudOnly(win, engine, false);   // KORAMA3D_NOHUD: conferência sem a HUD por cima else hud(win, font, engine);
             win.popGLStates(); };
         // ---------------- replay do nocaute: a fita volta e o golpe passa de novo, com cortes de câmera rápidos e câmera lenta no impacto ----------------
         const auto koDecisive = [&]() { const MatchResult r = engine.result; return r == MatchResult::WinKO || r == MatchResult::WinTKO || r == MatchResult::LossKO || r == MatchResult::LossTKO; };
@@ -611,7 +623,7 @@ int main(int argc, char** argv) {
             if (replayPos >= float(replayEnd)) replayFinish(); };
         const auto replayCamera = [&](const ReplayFrame& f, glm::vec3& eye, glm::vec3& at) {
             const MatchResult r = engine.result; const bool pLost = r == MatchResult::LossKO || r == MatchResult::LossTKO;
-            const glm::vec3 P(f.pP.root[3]), E(f.pE.root[3]), L = pLost ? P : E, Wn = pLost ? E : P, mid = (P + E) * 0.5f;
+            const glm::vec3 P = f.fx.koP.blast() ? f.fx.koP.from : glm::vec3(f.pP.root[3]), E = f.fx.koE.blast() ? f.fx.koE.from : glm::vec3(f.pE.root[3]), L = pLost ? P : E, Wn = pLost ? E : P, mid = (P + E) * 0.5f;
             const glm::vec3 axis = glm::normalize(glm::vec3(E.x - P.x, 0.f, E.z - P.z) + glm::vec3(0, 0, 1e-4f)), side = glm::cross(axis, glm::vec3(0, 1, 0)), away = glm::normalize(glm::vec3(L.x - Wn.x, 0.f, L.z - Wn.z) + glm::vec3(0, 0, 1e-4f));
             const float t = float(shotT);
             if (replayT <= kRewindFrames) { eye = mid - axis * 5.f + glm::vec3(0, 5.2f, 0); at = mid + glm::vec3(0, 0.6f, 0); return; }   // rebobinando: de cima
@@ -619,9 +631,9 @@ int main(int argc, char** argv) {
             case 0: eye = mid + side * (3.4f + 0.012f * t) + glm::vec3(0, 0.75f, 0); at = mid + glm::vec3(0, 1.05f, 0); break;                          // lateral baixa
             case 1: eye = L + away * 1.9f + side * 0.3f + glm::vec3(0, 1.55f, 0); at = Wn + glm::vec3(0, 1.15f, 0); break;                              // a visão de quem vai cair
             case 2: { const float a = 0.6f + t * 0.022f; eye = mid + glm::vec3(std::cos(a) * 4.6f, 3.6f, std::sin(a) * 4.6f); at = mid + glm::vec3(0, 0.8f, 0); break; }   // do alto, girando
-            case 3: eye = Wn + away * 1.7f - side * 0.9f + glm::vec3(0, 0.35f, 0); at = Wn + glm::vec3(0, 1.35f, 0); break;                             // de baixo, o vencedor
-            case 4: { const glm::vec3 c = rec[size_t(replayHit)].impact.placed ? rec[size_t(replayHit)].impact.at : mid + glm::vec3(0, 1.2f, 0); const float a = t * 0.03f;   // close no golpe, orbitando
-                eye = c + (side * std::cos(a) - axis * std::sin(a) * 0.6f) * 1.55f + glm::vec3(0, 0.25f, 0); at = c; break; }
+            case 3: eye = Wn + away * 1.3f - side * 1.5f + glm::vec3(0, 0.35f, 0); at = Wn + glm::vec3(0, 1.35f, 0); break;                             // de baixo, o vencedor
+            case 4: { glm::vec3 c = rec[size_t(replayHit)].impact.placed ? rec[size_t(replayHit)].impact.at : mid + glm::vec3(0, 1.2f, 0); c.y = std::max(c.y, 1.0f); /* golpe baixo: enquadra o tronco, não o cinto e os pés */ const float a = std::min(t * 0.03f, 0.85f);   // close no golpe, orbitando (sem dar a volta até entrar no corpo de quem bateu)
+                eye = c + (side * std::cos(a) - axis * std::sin(a) * 0.6f) * 2.15f + glm::vec3(0, 0.35f, 0); at = c; break; }
             default: eye = L + side * 4.5f - away * 1.2f + glm::vec3(0, 1.8f, 0); at = L + glm::vec3(0, 0.9f, 0); break;                               // aberto, o voo até as cordas
             } };
         const auto renderReplay = [&]() { if (!win.setActive(true)) throw std::runtime_error("contexto OpenGL perdido");

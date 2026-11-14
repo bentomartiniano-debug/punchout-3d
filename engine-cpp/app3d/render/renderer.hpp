@@ -35,7 +35,7 @@ public:
     // peças jogadas na comemoração (render/throwables.hpp): vértices posição, normal, cor, uv no atlas (u < 0: sem textura) e contorno; tex o atlas das roupas
     void props(const std::vector<float>& verts, const std::vector<unsigned>& idx, unsigned tex, float alpha = 1.f);   // alpha < 1: translúcida, sem contorno
     unsigned texture(const unsigned char* rgba, int w, int h);
-    void glow(const std::vector<float>& verts, const std::vector<unsigned>& idx);   // luz translúcida somada à cena (mesmo formato das props; a cor já vem com a opacidade)   // textura sRGB com mipmaps (para atlas feitos na hora)
+    void glow(const std::vector<float>& verts, const std::vector<unsigned>& idx, bool overlay = false);   // overlay: por cima de tudo (a estrelinha no céu, mesmo com teto)   // luz translúcida somada à cena (mesmo formato das props; a cor já vem com a opacidade)   // textura sRGB com mipmaps (para atlas feitos na hora)
     void effects(Model& m, float t);   // efeitos dos especiais gravados do vinil (render/fx_clips.hpp), depois dos lutadores
     void finish(int w, int h);
     // palco do menu (seleção de lutador): câmera escolhida por fora, fundo transparente (só o lutador, sem céu) e o quadro numa textura com alfa
@@ -50,6 +50,9 @@ public:
     void setCloud(const glm::vec3& center, float radius, float density, const glm::vec3& sil) { cloud_ = glm::vec4(center, std::max(radius, 0.01f)); cloudK_ = density; cloudSil_ = sil; }   // nuvem que vira silhueta quem está atrás
     // balançada da câmera no golpe forte: deslocamento (metros) e inclinação (radianos) que o laço do jogo amortece
     void setCameraKick(const glm::vec3& offset, float roll) { kick_ = offset; kickRoll_ = roll; }
+    // nocaute para a estratosfera: a câmera da luta fica onde está e vira o olhar para o ponto (k 0..1)
+    void setSkyLook(const glm::vec3& at, float k) { skyAt_ = at; skyK_ = k; }
+    glm::vec3 skyAt_{0.f}; float skyK_ = 0.f;
     void finishToTexture(unsigned tex, int w, int h);   // resolve o quadro (sem bloom nem acabamento) direto na textura GL tex   // brilho e acabamento, na tela; depois disso a HUD
 private:
     void apply(Model& m, const FighterPose& p);
