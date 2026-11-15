@@ -252,9 +252,21 @@ AiAction EnemyAI::beginSkill(Fighter& enemy, SkillId id) {
     if (need == 0) { AiAction a; a.cast = id; afterSkill = id != SkillId::None; return a; }
     const bool lead = enemy.isLeftPunch;
     combo.clear();
-    combo.push_back({FIGHTER_JAB, lead, 22, 0});
-    combo.push_back({FIGHTER_CROSS, !lead, 16, 0});
-    if (need >= 3) combo.push_back({FIGHTER_HOOK, lead, 20, 0});
+    // cada rival monta o combo do jeito dele (golpe, mão trocada ou não, quadros de aviso); o terceiro golpe só entra nos especiais fortes
+    struct Beat { FighterActionState move; bool swap; int tell; };
+    static const Beat kCombo[9][3] = {
+        {{FIGHTER_JAB, false, 18}, {FIGHTER_JAB, true, 13}, {FIGHTER_HOOK, false, 18}},        // Jack: dois jabs rápidos e gancho
+        {{FIGHTER_BODY_BLOW, false, 24}, {FIGHTER_HOOK, true, 18}, {FIGHTER_UPPER, false, 24}}, // King Frog: por baixo, de lado e por cima
+        {{FIGHTER_CROSS, false, 24}, {FIGHTER_HOOK, true, 20}, {FIGHTER_HOOK, false, 20}},      // Joana: direto e duas garras
+        {{FIGHTER_JAB, false, 24}, {FIGHTER_BODY_BLOW, true, 20}, {FIGHTER_CROSS, false, 22}},  // Cremoso: devagar, no corpo
+        {{FIGHTER_JAB, false, 16}, {FIGHTER_CROSS, true, 13}, {FIGHTER_UPPER, false, 18}},      // Valéria: curta e agressiva
+        {{FIGHTER_JAB, false, 18}, {FIGHTER_JAB, true, 18}, {FIGHTER_CROSS, false, 18}},        // Vivaldi: no compasso
+        {{FIGHTER_HOOK, false, 22}, {FIGHTER_HOOK, true, 18}, {FIGHTER_BODY_BLOW, false, 20}},  // Lady Espinha: tapas de lado
+        {{FIGHTER_CROSS, false, 26}, {FIGHTER_BODY_BLOW, true, 22}, {FIGHTER_UPPER, false, 26}},// Marcov: pesado e lento
+        {{FIGHTER_JAB, false, 22}, {FIGHTER_CROSS, true, 16}, {FIGHTER_HOOK, false, 20}},       // chefe: o combo padrão
+    };
+    const Beat* beat = kCombo[enemy.charId < 9 ? enemy.charId : 8];
+    for (int i = 0; i < std::min(need, 3); i++) combo.push_back({beat[i].move, beat[i].swap ? !lead : lead, beat[i].tell, 0});
     Step last; last.move = FIGHTER_SKILL; last.left = lead; last.skill = id;
     combo.push_back(last);
     enemy.chainNeed = need; enemy.chainCount = 0;

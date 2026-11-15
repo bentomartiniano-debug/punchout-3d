@@ -48,8 +48,15 @@ export default {
 
     // ================= cabeça: casinha de aço, visor vermelho com riscos, antenas
     F1.head.add(prism([[179, 182], [179, 127], [240, 87], [301, 127], [301, 182]], 96, -4, C.steel));
-    const visor = box(100, 28, 8, 240, 158, 44, C.red, 5); F1.head.add(ol(visor, 0.007));
-    for (const x of [212, 236, 260]) { const s = new THREE.Mesh(new THREE.BoxGeometry(D(4), D(20), D(2)), flat(C.white)); s.position.copy(V(x, 158, 48.5)); s.rotation.z = -0.6; F1.head.add(s); }
+    F1.head.add(prism([[190, 178], [190, 134], [240, 102], [290, 134], [290, 178]], 6, 45, C.steelLight, 1));   // placa clara do rosto (como no sprite)
+    const visor = box(100, 28, 8, 240, 158, 50, C.red, 5); F1.head.add(ol(visor, 0.007));
+    for (const x of [212, 236, 260]) { const s = new THREE.Mesh(new THREE.BoxGeometry(D(4), D(20), D(2)), flat(C.white)); s.position.copy(V(x, 158, 54.5)); s.rotation.z = -0.6; F1.head.add(s); }
+    F1.head.add(ol(box(116, 11, 20, 240, 140, 50, C.navyDark, 3), 0.006));   // capô escuro que avança sobre o visor
+    F1.head.add(ol(box(50, 9, 8, 240, 177, 47, C.navyDark, 2), 0.004));     // grade do queixo
+    for (const s of [-1, 1]) {   // cubos laterais (as orelhas do robô), com o miolo amarelo
+      const e = new THREE.Mesh(new THREE.CylinderGeometry(D(16), D(16), D(16), 22), flat(C.navyDark)); e.rotation.z = Math.PI / 2; e.position.copy(V(240 + s * 66, 152, -4)); F1.head.add(ol(e, 0.006));
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(D(7), D(7), D(19), 16), flat(C.yellow)); c.rotation.z = Math.PI / 2; c.position.copy(V(240 + s * 66, 152, -4)); F1.head.add(c);
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(D(7), D(9), D(10), 12), flat(C.navyDark)); b.position.copy(V(240 + s * 34, 104, -4)); b.rotation.z = -s * 0.32; F1.head.add(ol(b, 0.004)); }   // pé da antena
     for (const s of [-1, 1]) {
       const st = new THREE.CylinderGeometry(D(3), D(3), D(52), 10); const m = new THREE.Mesh(st, flat(C.ink)); m.position.copy(V(240 + s * 40, 84, -4)); m.rotation.z = -s * 0.32; F1.head.add(m);
       const b = new THREE.Mesh(new THREE.SphereGeometry(D(8), 16, 12), flat(C.red)); b.position.copy(V(240 + s * 53, 58, -4)); F1.head.add(ol(b, 0.005));
@@ -70,14 +77,22 @@ export default {
       const L = 132, g = new THREE.ConeGeometry(D(31), D(L), 36, 24, false); g.translate(0, D(L / 2), 0);
       const m = flat(C.yellow);
       m.onBeforeCompile = sh => {
-        sh.vertexShader = 'varying float vH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvH = position.y * ${S_PX.toFixed(1)} + atan(position.z, position.x) * 4.138;   // espiral fecha a volta sem emenda (26 px por volta)`);
-        sh.fragmentShader = 'varying float vH;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\nif (fract(vH / 26.0) < 0.45) diffuseColor.rgb = vec3(0.05, 0.06, 0.09);');
+        sh.vertexShader = 'varying float vH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nvH = position.y * ${S_PX.toFixed(1)} + atan(position.z, position.x) * 6.366;   // espiral fecha a volta sem emenda (40 px por volta: faixas largas)`);
+        sh.fragmentShader = 'varying float vH;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\nif (fract(vH / 40.0) < 0.5) diffuseColor.rgb = vec3(0.05, 0.06, 0.09);');
       };
       m.customProgramCacheKey = () => 'drill';
       const dr = new THREE.Mesh(g, m); dr.position.copy(V(240 + s * 80, 214, -4));
       dr.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(s * 0.55, 0.8, 0).normalize());
       R12.body.add(ol(dr, 0.008));
+      // ombreira: bloco arredondado de onde a broca sai, colar de aço e anel amarelo
+      const ax = new THREE.Vector3(s * 0.55, 0.8, 0).normalize(), UP0 = new THREE.Vector3(0, 1, 0);
+      const pd = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), flat(C.navy)); pd.scale.set(D(42), D(30), D(46)); pd.position.copy(V(240 + s * 86, 210, -4)); R12.body.add(ol(pd, 0.009));
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(D(33), D(37), D(18), 30), flat(C.steel)); col.position.copy(V(240 + s * 80, 214, -4)).addScaledVector(ax, D(9)); col.quaternion.setFromUnitVectors(UP0, ax); R12.body.add(ol(col, 0.007));
+      const bd = new THREE.Mesh(new THREE.CylinderGeometry(D(33.5), D(34.5), D(5), 30), flat(C.yellow)); bd.position.copy(V(240 + s * 80, 214, -4)).addScaledVector(ax, D(20)); bd.quaternion.setFromUnitVectors(UP0, ax); R12.body.add(bd);
+      // costelas: três placas escuras em degrau no flanco, embaixo da ombreira
+      for (let i = 0; i < 3; i++) R12.body.add(ol(box(24 - i * 3, 11, 64 - i * 6, 240 + s * (72 - i * 5), 236 + i * 15, -2, C.navyDark, 3), 0.005));
     }
+    R12.body.add(ol(box(62, 12, 58, 240, 187, -4, C.steel, 4), 0.006));   // pescoço: anel de aço entre a cabeça e os ombros
     { const g = new THREE.CylinderGeometry(D(52), D(52), D(22), 40); const m = flat(C.navyDark);
       m.onBeforeCompile = sh => {
         sh.vertexShader = 'varying vec3 vP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvP = position;');
@@ -95,6 +110,9 @@ export default {
     F1.pelvis.add(ol(box(34, 14, 4, 266, 356, 51, C.yellow, 3), 0.005));
     { const dk = new THREE.Mesh(new THREE.BoxGeometry(D(6), D(4), D(2)), flat(C.ink)); dk.position.copy(V(256, 356, 53.5)); F1.pelvis.add(dk); }
     R12.low.add(ol(box(120, 46, 6, 240, 350, -55, C.navyDark, 3), 0.006));
+    for (const s of [-1, 1]) {   // juntas do quadril: tambor de aço com o miolo amarelo, de onde a perna sai
+      const j = new THREE.Mesh(new THREE.CylinderGeometry(D(25), D(25), D(22), 26), flat(C.steel)); j.rotation.z = Math.PI / 2; j.position.copy(V(240 + s * 100, 372, -4)); R12.low.add(ol(j, 0.007));
+      const h = new THREE.Mesh(new THREE.CylinderGeometry(D(10), D(10), D(25), 16), flat(C.yellow)); h.rotation.z = Math.PI / 2; h.position.copy(V(240 + s * 100, 372, -4)); R12.low.add(h); }
     { const d = new THREE.Mesh(new THREE.CylinderGeometry(D(12), D(12), D(3), 24), flat(C.yellow)); d.rotation.x = Math.PI / 2; d.position.copy(V(240, 350, -59)); R12.low.add(ol(d, 0.004)); }
 
     // ================= pernas em bloco com faixa dourada (o pé é a parte de baixo do bloco)
@@ -104,10 +122,12 @@ export default {
       const x = LXp[s];
       const leg = new THREE.Group(); leg.position.copy(V(x, LEG_TOP, 0)); root.add(leg);
       const lb = new THREE.Mesh(new RoundedBoxGeometry(D(64), D(40), D(78), 3, D(5)), flat(C.navy)); lb.position.set(0, D(-20), 0); leg.add(ol(lb, 0.009));
+      const kp = new THREE.Mesh(new RoundedBoxGeometry(D(48), D(30), D(12), 3, D(4)), flat(C.steel)); kp.position.set(0, D(-20), D(41)); leg.add(ol(kp, 0.006));   // joelheira
       legs[s] = leg;
       const f = new THREE.Group(); f.position.copy(V(x, ANK, 0)); root.add(f);
       const fb = new THREE.Mesh(new RoundedBoxGeometry(D(70), D(42), D(88), 3, D(5)), flat(C.navy)); fb.position.set(0, D(-21), D(4)); f.add(ol(fb, 0.009));
       const st = new THREE.Mesh(new THREE.BoxGeometry(D(71), D(4), D(89)), flat(C.yellow)); st.position.set(0, D(-2), D(4)); f.add(st);
+      const tc = new THREE.Mesh(new RoundedBoxGeometry(D(74), D(24), D(26), 3, D(5)), flat(C.steel)); tc.position.set(0, D(-14), D(50)); f.add(ol(tc, 0.007));   // biqueira
       feet[s] = f; legPlace[s] = { leg: leg.position.clone(), foot: f.position.clone() };
     }
     // pernas de robô: o bloco de cima segue o quadril, o pé vai para onde a passada pede (sem esticar)
@@ -149,13 +169,8 @@ export default {
       for (const rz of [0.7, -0.7]) { const b = box(34, 7, 4, 348, 176, 24, C.rust, 2); b.rotation.z = rz; F2.body.add(ol(b, 0.004)); }   // curativo na broca
       tape(F2.low, 222, 352, 52, 56, 0.12); tape(F2.low, 268, 360, 52, 58, -0.15);
       // cabine: moldura ciano em escudo e o piloto (desenho do sprite) atrás do vidro
-      F2.low.add(prism([[166, 316], [314, 316], [306, 380], [240, 402], [174, 380]], 6, 47, '#19d3c5', 1));
-      F2.low.add(prism([[174, 322], [306, 322], [300, 376], [240, 396], [180, 376]], 6, 49, '#10202c', 1));
-      const k = 6, c = document.createElement('canvas'), box2 = [182, 305, 116, 92]; c.width = box2[2] * k; c.height = box2[3] * k;
-      const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(spr.frameCanvas('batalhator2FrontFrames_0'), box2[0], box2[1], box2[2], box2[3], 0, 0, c.width, c.height);
-      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-      const pl = new THREE.Mesh(new THREE.PlaneGeometry(D(box2[2]), D(box2[3])), new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.1 }));
-      pl.position.copy(V(box2[0] + box2[2] / 2, box2[1] + box2[3] / 2, 52.5)); F2.low.add(pl); }
+      F2.low.add(prism([[170, 330], [310, 330], [304, 392], [240, 412], [176, 392]], 6, 30, '#19d3c5', 1));   // moldura do buraco, atrás do nerd
+      F2.cockpit = true; }
     const F2legs = []; for (const s of [-1, 1]) { const t = new THREE.Group(); const b = box(56, 14, 5, 0, 0, 0, '#9aa6b8', 2); b.position.set(0, 0, 0); t.add(ol(b, 0.005)); t.position.set(0, D(-14), D(46)); t.rotation.z = s * 0.3; feet[s].add(t); F2legs.push(t); }
 
     // ================= fase 3: o nerd (cabeção, fone vermelho, óculos, camisa verde com o crachá, jeans, tênis vermelho)
@@ -167,10 +182,11 @@ export default {
     // camisa, pernas do jeans e o sapato da Valéria como tênis vermelho de sola branca (medidas já 8 px mais baixas)
     const NB = valeriaBody(U, bodyOpts(VALERIA, { cx: CX, skin: NC.shirt, legCol: NC.jeans, face: NC.skin, neck: '#efbfa2',
       head: { top: 145, bot: 222, a: 84, d: 0.72, cz: 0 }, yoke: { y0: 212, y1: 236, a0: 30, a1: 76, d: 0.6, cz: -4, end: 244 },
-      torso: { y0: 222, y1: 376, a: 82, d: 0.6, cz: -4 }, legs: { dx: 45, top: 376, bot: 446, r: 19, d: 0.85 },
+      torso: { y0: 222, y1: 336, a: 80, d: 0.6, cz: -4 }, legs: { dx: 42, top: 352, bot: 446, r: 21, d: 0.85 },
       shoe: { k: 1.15, toe: 20, up: NC.red, sole: NC.white, rim: NC.red, buckle: null, foot: FOOT } }));
     { N3.head.add(NB.face);   // cabeça = ovo da base
-      const hr = [{ y: 88, l: CX - 3, r: CX + 3 }]; for (let y = 98; y <= 200; y += 2) hr.push({ y: y - 8, l: CX - HA3(y) - 2.5, r: CX + HA3(y) + 2.5 });
+      // cabelo: touca arredondada no alto (acompanha a cúpula da cabeça), não um bloco de topo reto
+      const hr = [{ y: 84, l: CX - 3, r: CX + 3 }]; for (let y = 94; y <= 200; y += 2) { const t = Math.max(0, (158 - y) / 66), a = (HA3(y) + 2.5) * Math.sqrt(Math.max(0.02, 1 - t * t)); hr.push({ y: y - 8, l: CX - a, r: CX + a }); }
       const hm = flat(NC.hair);
       hm.onBeforeCompile = sh => {
         sh.vertexShader = 'varying vec3 vP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvP = position;');
@@ -179,7 +195,7 @@ export default {
             if (yy > 138.0 + 64.0 * smoothstep(-0.3, -0.9, sn)) discard; }`);
       };
       hm.customProgramCacheKey = () => 'nerdhair';
-      N3.head.add(new THREE.Mesh(U.loft(hr, { depth: 0.74, cz: 0, NA: 64, pw: 3, capTop: false, capBot: false }), hm));
+      N3.head.add(new THREE.Mesh(U.loft(hr, { depth: 0.74, cz: 0, NA: 64, pw: 2.3, capTop: false, capBot: false }), hm));
       for (const [x, h, rz] of [[234, 30, 0.15], [252, 24, -0.25]]) { const cn = new THREE.Mesh(new THREE.ConeGeometry(D(9), D(h), 12), flat(NC.hair)); cn.position.copy(NV(x, 92 - h / 2, -4)); cn.rotation.z = rz; N3.head.add(ol(cn, 0.006)); }
       // fone: arco vermelho por cima e as conchas nas orelhas, luzinhas azuis
       const band = new THREE.Mesh(new THREE.TorusGeometry(D(94), D(5.5), 10, 48, Math.PI), flat(NC.red)); band.position.copy(NV(240, 182, -6)); band.scale.y = 1.12; N3.head.add(ol(band, 0.006));
@@ -236,7 +252,12 @@ export default {
     }
     { N3.body.add(NB.torso);   // tronco da base com a camisa
       const sz = 80 * 0.6 - 4;
-      for (const s of [-1, 1]) { const st = new THREE.Mesh(new THREE.SphereGeometry(D(20), 20, 14), flat(NC.shirtDark)); st.position.copy(NV(240 + s * 80, 252, -4)); N3.body.add(ol(st, 0.007)); }   // tocos dos ombros
+      for (const s of [-1, 1]) {   // mangas curtas: ombro redondo, tubo cônico caindo para fora e a barra mais escura
+        const sh = NV(240 + s * 78, 250, -4), TH = s * 0.62, dirv = new THREE.Vector3(Math.sin(TH), -Math.cos(TH), 0), UPV3 = new THREE.Vector3(0, 1, 0);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(D(22), 22, 16), flat(NC.shirt)); cap.position.copy(sh); N3.body.add(ol(cap, 0.007));
+        const sl = new THREE.Mesh(new THREE.CylinderGeometry(D(20), D(25), D(46), 22), flat(NC.shirt)); sl.position.copy(sh).addScaledVector(dirv, D(22)); sl.rotation.z = TH; N3.body.add(ol(sl, 0.007));
+        const cf = new THREE.Mesh(new THREE.CylinderGeometry(D(25.5), D(26), D(9), 22), flat(NC.shirtDark)); cf.position.copy(sh).addScaledVector(dirv, D(42)); cf.rotation.z = TH; N3.body.add(ol(cf, 0.006));
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(D(13), D(12), D(18), 16), flat(NC.skin)); arm.position.copy(sh).addScaledVector(dirv, D(54)); arm.rotation.z = TH; N3.body.add(ol(arm, 0.006)); }
       const pk = box(30, 40, 4, 188, 267, sz + 2, NC.grey, 2); pk.position.y -= D(8); N3.body.add(ol(pk, 0.005));
       // gola polo: duas abas verde-escuras dobradas sobre o peito e o botão da carcela
       for (const sx of [-1, 1]) { const sh = new THREE.Shape([[0, 0], [sx * 30, 4], [sx * 22, 24], [sx * 4, 16]].map(([x, y]) => new THREE.Vector2(D(x), D(-y))));
@@ -249,13 +270,13 @@ export default {
       const bm = flat(NC.badge);
       const bd = new THREE.Mesh(new THREE.BoxGeometry(D(62), D(34), D(4)), [bm, bm, bm, bm, new THREE.MeshBasicMaterial({ map: bt }), bm]);
       bd.position.copy(NV(240, 270, sz + 2)); N3.body.add(ol(bd, 0.005)); }
-    { const rows = []; for (let y = 378; y <= 392; y += 2) rows.push({ y: y - 8, l: CX - 82, r: CX + 82 });
+    { const rows = []; for (let y = 342; y <= 368; y += 2) rows.push({ y: y - 8, l: CX - 80 + (y - 342) * 0.25, r: CX + 80 - (y - 342) * 0.25 });
       N3.low.add(ol(new THREE.Mesh(U.loft(rows, { depth: 0.6, cz: -4, NA: 48, pw: 2.8, capTop: false, capBot: true }), flat(NC.jeans)), 0.008));
       // cinto marrom com a fivela prateada
-      const br = []; for (let y = 364; y <= 374; y += 2) br.push({ y, l: CX - 84, r: CX + 84 });
+      const br = []; for (let y = 326; y <= 336; y += 2) br.push({ y, l: CX - 82, r: CX + 82 });
       N3.low.add(ol(new THREE.Mesh(U.loft(br, { depth: 0.6, cz: -4, NA: 48, pw: 2.8, capTop: false, capBot: false }), flat('#4a2e1c')), 0.006));
-      N3.low.add(ol(box(22, 14, 4, 240, 369, 84 * 0.6 - 2, '#cfd8e2', 2), 0.004)); }
-    const nLegs = {}, nFeet = {}, NLX = { [-1]: 195, [1]: 285 }, NTOP = 384, NANK = 438;
+      N3.low.add(ol(box(22, 14, 4, 240, 331, 82 * 0.6 - 2, '#cfd8e2', 2), 0.004)); }
+    const nLegs = {}, nFeet = {}, NLX = { [-1]: 198, [1]: 282 }, NTOP = 360, NANK = 438;
     for (const s of [-1, 1]) { nLegs[s] = NB.legs[s]; nFeet[s] = NB.feet[s]; root.add(nLegs[s], nFeet[s]); }   // pernas e tênis da base
     const nPlace = legPlacer({ legs: nLegs, feet: nFeet, hipX: { [-1]: X(NLX[-1]), [1]: X(NLX[1]) }, top: NB.legTop, bot: NB.legBot, hips, hipsY: HIPS });
     // mãos do nerd: punho com esparadrapo segurando o manche de fliperama (bola vermelha)
@@ -270,6 +291,23 @@ export default {
       return g;
     }
     P.sticks = { [-1]: stick(), [1]: stick() }; root.add(P.sticks[-1], P.sticks[1]);
+    // ================= o piloto da fase 2: o nerd INTEIRO atravessa o robô pelo buraco do quadril. A metade de cima (cabeça, camisa com
+    // mangas e cinto) fica na frente, os manches nas mãos, e as perninhas de jeans saem pelas costas do robozão, balançando.
+    // Tudo no grupo "pilot" (nó "sway" no jogo). Sem cúpula de vidro: só o aro de aço do buraco, na frente e atrás
+    { const K = 0.62, pilot = new THREE.Group(), up = new THREE.Group();
+      up.add(N3.head.clone(true), N3.body.clone(true), N3.low.clone(true));
+      up.scale.setScalar(K); up.position.set(0, Y(376) - K * Y(350), D(30)); pilot.add(up);
+      for (const sx of [-1, 1]) { const st = stick(); st.scale.setScalar(K * 0.95); st.position.copy(V(240 + sx * 66, 388, 62)); st.rotation.set(0.35, 0, -sx * 0.25); pilot.add(st); }
+      // pernas: saem do quadril para trás (eixo -z), jeans, e o tênis vermelho de sola branca na ponta
+      const legs2 = new THREE.Group(); legs2.position.copy(V(240, 376, 20)); pilot.add(legs2); F2.nerdLegs = legs2;
+      for (const sx of [-1, 1]) { const lg = new THREE.Group(); lg.position.x = D(sx * 21);
+        const jn = new THREE.Mesh(new THREE.CylinderGeometry(D(14), D(13), D(120), 20), flat(NC.jeans)); jn.rotation.x = Math.PI / 2; jn.position.z = -D(60); lg.add(ol(jn, 0.006));
+        const sh = new THREE.Mesh(new RoundedBoxGeometry(D(30), D(26), D(44), 4, D(8)), flat(NC.red)); sh.position.set(0, -D(3), -D(128)); lg.add(ol(sh, 0.007));
+        const sl = new THREE.Mesh(new THREE.BoxGeometry(D(32), D(7), D(46)), flat(NC.white)); sl.position.set(0, -D(15), -D(128)); lg.add(sl);
+        legs2.add(lg); }
+      F2.low.add(pilot); P.dreads = [pilot]; F2.pilot = pilot;
+      // aro do buraco: argola de aço com o filete ciano na frente e outra atrás, para as pernas saírem de dentro
+      for (const [z, col] of [[52, '#19d3c5'], [-58, '#9aa6b8']]) { const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.09, 12, 48), flat(col)); rim.scale.set(D(56), D(40), D(14)); rim.position.copy(V(240, 378, z)); F2.low.add(ol(rim, 0.006)); } }
 
     // ================= troca de forma (botões no painel; ?fase=2 abre direto)
     let form = 1;
@@ -380,6 +418,7 @@ export default {
 
     const onFrame = c => {
       if (F2.topSaw) F2.topSaw.userData.spin.rotation.y += c.dt * 9;
+      if (F2.nerdLegs) { const tt = performance.now() / 1000; F2.nerdLegs.children.forEach((lg, k) => { lg.rotation.x = Math.sin(tt * 3.1 + k * 2.2) * 0.16; lg.rotation.y = Math.sin(tt * 2.3 + k) * 0.1; }); }
       for (const sx of [-1, 1]) {
         const G = form < 3 ? P.saws[sx] : P.sticks[sx], k = Math.min(1, Math.max(0, c.pose[sx][0] / 0.3));
         G.position.copy(hands[sx].position);

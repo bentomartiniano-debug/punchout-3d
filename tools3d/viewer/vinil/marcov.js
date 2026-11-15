@@ -10,10 +10,11 @@ import { THREE, ss, rrect, INK, INKS, flat, withOutline, legPlacer } from './cor
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
+import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 import { VALERIA, bodyOpts, valeriaBody } from './base.js';
 
 const S_PX = 245, FOOT = 457, CX = 240;
-const C = { fur: '#8a5432', neck: '#74462a', skin: '#b87e56', skinDark: '#a26c46', muzzle: '#c68e64', nose: '#a86e4a', line: '#7a4a2e', earIn: '#9a6444', hair: '#8a5432', hairHi: '#a26a42', brow: '#6a3a20',
+const C = { fur: '#7b4b2f', neck: '#74462a', skin: '#cf9f6f', skinDark: '#a8764c', muzzle: '#b98a5e', nose: '#a86e4a', line: '#8b5a3c', earIn: '#8b5a3c', hair: '#5e3824', hairHi: '#8b5a3c', brow: '#6a3a20',
             coat: '#eef0e6', coatShade: '#c4ccc4', lining: '#d4dad2', shirt: '#1e3a4e', shirtDark: '#142a3a', screen: '#3ec6c8', pants: '#3a4250', pantsDark: '#2a303b', belt: '#2a1c14', shoe: '#2a4a5e', shoeHi: '#3d6680',
             sole: '#14262c', led: '#7ee8e0', red: '#c8443a', glove: '#7a4628', tip: '#c08a58', cuff: '#24384a', tail: '#7a4628' };
 const col = h => ({ value: new THREE.Color(h) });
@@ -30,7 +31,10 @@ export default {
     const { X, Y, D, loft } = U, P = {};
     // corpo: o da Valéria (base.js) maior e mais largo: cabeção de ovo largo, pescoço que abre nos ombros, tronco da
     // camisa (a calça embaixo), pernas da calça e o sapato da Valéria escuro
-    const B = valeriaBody(U, bodyOpts(VALERIA, { cx: CX, skin: C.shirt, legCol: C.pants, face: C.fur, neck: C.neck, jaw: false,
+    // rosto anguloso: da linha dos olhos desce reto até a maçã do rosto, quebra no canto do maxilar e fecha num queixo largo e reto
+    const JAW = [[149, 86], [170, 86], [193, 73], [207, 50], [214, 44]];
+    const jawA = y => { if (y <= JAW[0][0]) return JAW[0][1]; for (let i = 1; i < JAW.length; i++) if (y <= JAW[i][0]) { const [y0, a0] = JAW[i - 1], [y1, a1] = JAW[i]; return a0 + (a1 - a0) * (y - y0) / (y1 - y0); } return JAW[JAW.length - 1][1]; };
+    const B = valeriaBody(U, bodyOpts(VALERIA, { cx: CX, skin: C.shirt, legCol: C.pants, face: C.fur, neck: C.neck, jaw: false, faceA: jawA, headPw: 3.2,
       head: { top: 149, bot: 214, a: 86, d: 0.82, cz: 0 }, yoke: { y0: 204, y1: 230, a0: 40, a1: 64, d: 0.7, cz: -2, end: 236 },
       torso: { y0: 222, y1: 344, a: 66, d: 0.66, cz: -4 }, legs: { dx: 48, top: 340, bot: 422, r: 21, d: 0.95 },
       shoe: { k: 1.2, toe: 20, up: C.shoe, sole: C.sole, rim: C.shoe, strap: C.led, buckle: null, foot: FOOT } }));
@@ -85,135 +89,101 @@ export default {
     const upper = new THREE.Group(); upper.position.y = WAIST; root.add(upper);
     const body = new THREE.Group(); body.position.y = -WAIST; upper.add(body);
     const neck = new THREE.Group(); neck.position.y = NECK - WAIST; upper.add(neck);
-    const head = new THREE.Group(); head.position.y = D(10) - NECK; neck.add(head);   // cabeça erguida como a da Valéria
-    // a cabeça é uma malha só: subdividida bem fina e daí moldada no lugar — a testa saltada (o arco da sobrancelha) e
-    // os pelos espetados (topete e costeletas) saem puxados da própria malha. O contorno e a casca do pelo vêm dela,
-    // então acompanham tudo sem cone colado nem risco atravessando
-    const ridge = (x, y) => 9 * Math.exp(-(((y - 139) / 8.5) ** 2)) * (1 - ss(46, 70, Math.abs(x - CX)));
-    const spikes = [];   // { p: base em px, d: direção em px (y para baixo), h, r }; ponta reta, pé macio (sem vinco)
-    const spike = (y, th, h, r, d) => spikes.push({ p: new THREE.Vector3(...B.surfOff(y, th, 0)), d: d.normalize(), h, r });
-    for (let k = 0; k < 11; k++) { const th = Math.PI / 2 + (k - 5) * 0.42;   // topete: espetado para cima e para trás
-      spike(98 + Math.abs(k - 5) * 2.2, th, 38 + ((k * 7) % 3) * 7 - Math.abs(k - 5) * 1.5, 13, new THREE.Vector3(Math.cos(th) * 0.55, -1, Math.sin(th) * 0.35 - 0.35)); }
-    for (const s of [-1, 1]) for (const [y, a, h, r, tilt] of [[178, 1.3, 24, 10, 0.35], [195, 1.2, 22, 10, 0.5], [209, 1.08, 16, 8, 0.75]]) {   // costeletas
-      const th = Math.PI / 2 + s * a, n = new THREE.Vector3(Math.cos(th), 0, 0.12).normalize();
-      spike(y, th, h, r, n.multiplyScalar(1 - tilt * 0.5).add(new THREE.Vector3(0, tilt, 0))); }
-    { let g = B.faceGeo.clone(); g.deleteAttribute('normal'); g = new TessellateModifier(D(3.2), 8).modify(g); g.deleteAttribute('normal');
-      g = mergeVertices(g, 1e-5); const p = g.attributes.position, v = new THREE.Vector3(), sid = [], sw = [], smv = [];
-      for (let i = 0; i < p.count; i++) { const x = p.getX(i) * S_PX + CX, y = FOOT - p.getY(i) * S_PX, z = p.getZ(i) * S_PX; v.set(x, y, z);
-        if (z > 0.55 * B.headZ(x, y)) v.z += ridge(x, y);
-        // cada vértice guarda a ponta a que pertence (sid), quanto ela o leva no balanço (sm: nada no pé, tudo na ponta) e
-        // o quanto está perto dela (sw: 0 a dois raios, 0.5 no pé, 1 na ponta; para afinar o contorno no pé e em volta)
-        const o = v.clone(); let best = -1, bw = 0, bm = 0;
-        let near = 0; spikes.forEach((sp, k) => { const dd = o.distanceTo(sp.p), w = 1 - dd / sp.r; near = Math.max(near, 1 - dd / (2 * sp.r)); if (w > 0) { const m = w * ss(0, 0.4, w); v.addScaledVector(sp.d, sp.h * m); if (w > bw) { bw = w; bm = m; best = k; } } });
-        sid.push(best); sw.push(near); smv.push(bm); p.setXYZ(i, X(v.x), Y(v.y), D(v.z)); }
-      g.setAttribute('sid', new THREE.Float32BufferAttribute(sid, 1)); g.setAttribute('sw', new THREE.Float32BufferAttribute(sw, 1)); g.setAttribute('sm', new THREE.Float32BufferAttribute(smv, 1));
-      g.computeVertexNormals(); B.face.children.find(o => !o.userData.hull).geometry = g; B.faceGeo = g; }
-    head.add(B.face);
-    // o contorno da cabeça com as normais soldadas: com as costuras do ovo abertas a casca preta aparecia como um risco
-    // no meio da bochecha
-    // Cópia da malha só com posição e os dados das pontas (para as outras cascas, a do contorno e a do pelo)
-    const headCopy = () => { const g = new THREE.BufferGeometry(); for (const k of ['position', 'sid', 'sw', 'sm']) g.setAttribute(k, B.faceGeo.attributes[k].clone());
-      if (B.faceGeo.index) g.setIndex(B.faceGeo.index.clone()); return mergeVertices(g, 1e-4); };
-    const furGeos = [B.faceGeo];   // malhas que balançam com os pelos
-    { const hull = B.face.children.find(o => o.userData.hull), mg = headCopy(); mg.computeVertexNormals();
-      // e o contorno acaba no fim da cabeça (some entre o queixo e o pescoço, que fica dentro da gola); no pé de cada
-      // ponta ele quase some (ali a malha dobra para dentro e a casca preta aparecia como sujeira), volta na ponta
-      const m = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
-      m.onBeforeCompile = sh => { sh.vertexShader = 'attribute float sw;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-        float ow = 1.0 - 0.9 * smoothstep(0.5, 0.53, sw) * (1.0 - smoothstep(0.65, 0.8, sw));
-        transformed += normal * ${(0.013).toFixed(4)} * ow * smoothstep(${Y(218).toFixed(4)}, ${Y(206).toFixed(4)}, position.y);`); };
-      m.customProgramCacheKey = () => 'marcovHull';
-      const nh = new THREE.Mesh(mg, m); nh.userData.hull = true; B.face.remove(hull); B.face.add(nh); furGeos.push(mg); }
-    // ================= rosto de chimpanzé (pela arte-alvo): pelo marrom na cabeça toda, máscara clara dos olhos às
-    // bochechas, sobrancelhas grossas em relevo (a testa saltada), olhos grandes com íris castanha, nariz em bolota com
-    // ponte e narinas, focinho claro saltado com a boca larga
+    const head = new THREE.Group(); head.position.y = D(11) - NECK; neck.add(head);   // cabeça erguida como a da Valéria
+    // ================= a cabeça em volumes (pelas referências de macaco e pelo retrato): cada peça é o casco convexo de poucos
+    // pontos (px do quadro, x a partir do centro, espelhado) com as quinas arredondadas (o casco encolhe e ganha uma bola de
+    // raio r em cada ponto), então os planos ficam retos e as bordas macias. Crânio de pelo atrás; placa clara do rosto com a
+    // testa recuada; arco da testa saltado sobre os olhos; focinho largo projetado com o nariz pequeno no alto; maxilar;
+    // orelhas grandes em concha; cabelo em touca com espetos
+    const spikes = [], furGeos = [];   // (o balanço antigo dos pelos da malha única não se aplica mais)
     const ink = (g, w) => { g.strokeStyle = INKS; g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; };
-    const surfZ = (x, y) => B.headZ(x, y) + ridge(x, y);
-    // nariz: bolota larga embaixo e fina em cima (a ponte), com as duas narinas viradas para baixo e para a frente
-    { const ng = new THREE.SphereGeometry(1, 36, 24), np = ng.attributes.position;
-      for (let i = 0; i < np.count; i++) { const y = np.getY(i); np.setX(i, np.getX(i) * (0.55 + 0.45 * (1 - y) / 2 + 0.15 * Math.max(0, -y))); }
-      ng.computeVertexNormals();
-      const z = surfZ(CX, 164), nose = new THREE.Mesh(ng, flat(C.nose)); nose.scale.set(D(19), D(11), D(8)); nose.position.copy(V(CX, 164, z + 1.5)); head.add(ol(nose, 0.007));
-      for (const sx of [-1, 1]) { const n = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), flat('#3a1a0c')); n.scale.set(D(4.6), D(3), D(2.5)); n.rotation.set(0.7, 0, sx * 0.3); n.position.copy(V(CX + sx * 8, 168.5, z + 7)); head.add(n); } }
-    // focinho: o beiço claro saltado com a boca pintada numa textura projetada de frente (troca com a expressão)
-    const MZ = { x0: 190, x1: 290, y0: 160, y1: 220 };
-    const muzzleTex = f => { const c = document.createElement('canvas'); c.width = 500; c.height = 300; const g = c.getContext('2d');
-      g.scale(c.width / (MZ.x1 - MZ.x0), c.height / (MZ.y1 - MZ.y0)); g.translate(-MZ.x0, -MZ.y0);
-      g.fillStyle = C.muzzle; g.fillRect(MZ.x0, MZ.y0, MZ.x1 - MZ.x0, MZ.y1 - MZ.y0);
-      g.strokeStyle = C.line; g.lineWidth = 1.4; g.lineCap = 'round'; g.beginPath(); g.moveTo(240, 176); g.lineTo(240, 184); g.stroke();   // o sulco do lábio
-      if (f === 'angry') {   // dentes cerrados, largos
-        g.fillStyle = '#2a1410'; rrect(g, 211, 186, 58, 16, 6); g.fill();
-        g.fillStyle = '#f4f1e6'; rrect(g, 213, 188, 54, 12, 4); g.fill();
-        ink(g, 1.2); g.beginPath(); g.moveTo(214, 194); g.lineTo(266, 194); for (const x of [222, 231, 240, 249, 258]) { g.moveTo(x, 188.5); g.lineTo(x, 199.5); } g.stroke();
-        ink(g, 2.4); rrect(g, 211, 186, 58, 16, 6); g.stroke(); }
-      else if (f === 'pain') { ink(g, 2.8); g.beginPath(); g.moveTo(212, 194); for (let k = 0; k < 4; k++) g.quadraticCurveTo(219 + k * 14, k % 2 ? 199 : 189, 226 + k * 14, 194); g.stroke(); }
-      else if (f === 'ko') { g.fillStyle = '#4a1414'; g.beginPath(); g.ellipse(240, 194, 8, 7, 0, 0, 7); g.fill(); ink(g, 2.4); g.stroke(); }
-      else { ink(g, 3); g.beginPath(); g.moveTo(216, 196); g.quadraticCurveTo(240, 191, 264, 196); g.stroke();
-        g.strokeStyle = C.line; g.lineWidth = 1.4; g.beginPath(); g.moveTo(232, 202); g.quadraticCurveTo(240, 204, 248, 202); g.stroke(); }
+    const BALL = (() => { const ig = new THREE.IcosahedronGeometry(1, 2), ip = ig.attributes.position, seen = new Set(), out = [];
+      for (let i = 0; i < ip.count; i++) { const k = [ip.getX(i), ip.getY(i), ip.getZ(i)].map(v => v.toFixed(3)).join(); if (!seen.has(k)) { seen.add(k); out.push(new THREE.Vector3(ip.getX(i), ip.getY(i), ip.getZ(i))); } } return out; })();
+    const roundHull = (q, r) => {   // q: pontos no mundo; r em px
+      let pts = q; if (r > 0) { const c = new THREE.Vector3(); q.forEach(v => c.add(v)); c.multiplyScalar(1 / q.length); const rr = D(r); pts = [];
+        for (const v of q) { const d = v.clone().sub(c), L = d.length(), in0 = c.clone().addScaledVector(d, Math.max(0.2, 1 - rr / Math.max(L, 1e-6))); for (const n of BALL) pts.push(in0.clone().addScaledVector(n, rr)); } }
+      let g = new ConvexGeometry(pts); g.deleteAttribute('normal'); if (g.attributes.uv) g.deleteAttribute('uv'); g = mergeVertices(g, 1e-5); g.computeVertexNormals(); return g; };
+    const hullGeo = (pts, r, mirror = true) => { const q = []; for (const [x, y, z] of pts) { q.push(V(CX + x, y, z)); if (mirror && x !== 0) q.push(V(CX - x, y, z)); } return roundHull(q, r); };
+    const piece = (pts, mat, r = 6, w = 0.010, mirror = true) => { const m = new THREE.Mesh(hullGeo(pts, r, mirror), typeof mat === 'string' ? flat(mat) : mat); head.add(w ? ol(m, w) : m); return m; };
+    const swayTip = (m, pts) => { const tip = pts[pts.length - 1], base = pts.slice(0, -1), n = base.length, c = base.reduce((a, q) => [a[0] + q[0] / n, a[1] + q[1] / n, a[2] + q[2] / n], [0, 0, 0]);
+      const A = V(CX + c[0], c[1], c[2]), ax = V(CX + tip[0], tip[1], tip[2]).sub(A), L2 = ax.lengthSq(), pp = m.geometry.attributes.position, sm = new Float32Array(pp.count), v = new THREE.Vector3();
+      for (let i = 0; i < pp.count; i++) { const t = Math.min(1, Math.max(0, v.fromBufferAttribute(pp, i).sub(A).dot(ax) / L2)); sm[i] = t * t; }
+      m.geometry.setAttribute('sm', new THREE.BufferAttribute(sm, 1)); return m; };
+    // --- crânio (pelo)
+    piece([[0, 97, 5], [38, 99, 30], [42, 98, -30], [0, 100, -48], [72, 112, 10], [66, 114, -40],
+           [86, 140, 0], [76, 138, 34], [70, 140, -52], [0, 128, -76], [86, 172, -4], [74, 172, 30], [62, 175, -56], [0, 170, -80],
+           [70, 200, -6], [58, 200, 26], [46, 204, -48], [0, 204, -62], [40, 218, 14], [34, 218, -30], [0, 218, -40]], C.fur, 12, 0.011);
+    // --- peças do rosto com pintura (projeção de frente, px do quadro)
+    const FB = { x0: 150, x1: 330, y0: 92, y1: 224 }, FK = 6;
+    const paints = [];   // { mat, bg, part }
+    const faceTex = (bg, part, f) => { const c = document.createElement('canvas'); c.width = (FB.x1 - FB.x0) * FK; c.height = (FB.y1 - FB.y0) * FK; const g = c.getContext('2d');
+      g.scale(FK, FK); g.translate(-FB.x0, -FB.y0); g.fillStyle = bg; g.fillRect(FB.x0, FB.y0, FB.x1 - FB.x0, FB.y1 - FB.y0); marcovFace(g, f, part);
       const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
-    const muzzleMat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: flat('#fff').gradientMap, map: muzzleTex('normal') });
-    { const mg = new THREE.SphereGeometry(1, 48, 32), mp = mg.attributes.position, uv = mg.attributes.uv, R = [38, 24, 17], CY = 190;
-      for (let i = 0; i < mp.count; i++) { const x = mp.getX(i), y = mp.getY(i); uv.setXY(i, (CX + x * R[0] - MZ.x0) / (MZ.x1 - MZ.x0), 1 - (CY - y * R[1] - MZ.y0) / (MZ.y1 - MZ.y0)); }
-      const mz = new THREE.Mesh(mg, muzzleMat); mz.scale.set(D(R[0]), D(R[1]), D(R[2])); mz.position.copy(V(CX, CY, surfZ(CX, CY) - 8)); head.add(ol(mz, 0.008)); }
+    const painted = (pts, bg, part, r = 6, w = 0.010) => { const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: flat('#fff').gradientMap, map: faceTex(bg, part, 'normal') });
+      mat.onBeforeCompile = () => {};   // marca a peça para o exportador assar (é o que leva as expressões para o jogo)
+      const m = piece(pts, mat, r, w), g = m.geometry, pp = g.attributes.position, uv = new Float32Array(pp.count * 2);
+      for (let i = 0; i < pp.count; i++) uv.set([(pp.getX(i) * S_PX + CX - FB.x0) / (FB.x1 - FB.x0), 1 - (FOOT - pp.getY(i) * S_PX - FB.y0) / (FB.y1 - FB.y0)], i * 2);
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); paints.push({ mat, bg, part }); return m; };
+    // placa do rosto: escudo de seis lados (lados retos, quebra no canto do maxilar, queixo largo); a testa recua para trás
+    painted([[44, 101, 34], [68, 111, 38], [79, 127, 44], [81, 166, 47], [65, 198, 45], [40, 216, 43], [0, 217, 46], [0, 102, 38], [0, 165, 52],
+             [44, 101, 14], [68, 111, 15], [79, 127, 16], [81, 166, 18], [65, 198, 18], [40, 216, 18]], C.skin, 'plate', 7, 0.011);
+    // maxilar: bloco largo que avança embaixo do focinho (a boca é a junta dos dois)
+    painted([[49, 187, 44], [42, 188, 77], [0, 190, 81], [47, 204, 86], [0, 205, 92], [40, 218, 44], [37, 217, 78], [0, 218, 84]], C.skin, 'jaw', 6, 0.009);
+    // focinho: almofada larga e baixa, mais larga embaixo, bem projetada
+    painted([[38, 169, 44], [47, 191, 44], [34, 171, 70], [42, 187, 77], [0, 169, 74], [0, 190, 81], [41, 179, 76]], C.muzzle, 'muzzle', 10, 0.010);
+    // nariz de macaco: pequeno, em coração, no alto do focinho, com as duas narinas juntas viradas para a frente
+    painted([[7, 150, 60], [13, 167, 76], [0, 172, 82], [0, 148, 64], [8, 160, 73]], C.muzzle, 'nose', 5, 0);   // sem contorno: é um relevo do focinho, não um disco
+    // arco da testa: a barra saltada sobre os olhos (a testa proeminente), com as sobrancelhas pintadas nela
+    painted([[84, 124, 16], [84, 140, 16], [80, 124, 49], [80, 140, 50], [58, 115, 52], [34, 110, 54], [34, 142, 56], [0, 108, 55], [0, 144, 58], [0, 106, 38], [40, 108, 36]], C.skin, 'ridge', 6, 0.008);   // topo em arco, não reto
 
-    // ================= o resto do rosto desenhado na textura do ovo: máscara clara, ponte do nariz e os olhos
-    function marcovFace(g, f) {
-      // máscara: faixa larga dos olhos (das sobrancelhas até embaixo deles) descendo pelas bochechas até o focinho
-      const mask = () => { g.beginPath(); g.ellipse(240, 144, 70, 27, 0, 0, 7); g.ellipse(240, 182, 50, 32, 0, 0, 7); for (const s of [-1, 1]) g.ellipse(240 + s * 38, 160, 27, 21, 0, 0, 7); };
-      g.save(); g.filter = 'blur(2.5px)'; g.fillStyle = C.skinDark; g.strokeStyle = C.skinDark; g.lineWidth = 4; mask(); g.stroke(); g.fill(); g.restore();
-      g.save(); g.filter = 'blur(1px)'; g.fillStyle = C.skin; mask(); g.fill(); g.restore();
-      // sobrancelhas: blocos retos e grossos pintados em cima do arco da testa; a expressão inclina o bloco (raiva desce o
-      // de dentro, dor sobe)
-      { const tin = f === 'angry' ? 7 : f === 'pain' ? -6 : f === 'ko' ? -2 : 1, tout = f === 'angry' ? -3 : f === 'pain' ? 3 : 0;
-        for (const s of [-1, 1]) { const xi = 240 + s * 11, xo = 240 + s * 72;
-          const yT = k => 123 + tin + (tout - tin) * k, yB = k => 137 + tin + (tout - tin) * k;
-          g.beginPath(); g.moveTo(xi, yB(0)); g.lineTo(xi, yT(0)); g.lineTo(xo, yT(1)); g.lineTo(xo, yB(1)); g.closePath(); g.fillStyle = C.brow; g.fill(); } }
-      // a ponte do nariz e as olheiras
-      g.strokeStyle = C.line; g.lineWidth = 1.5; g.lineCap = 'round'; g.beginPath(); for (const s of [-1, 1]) { g.moveTo(240 + s * 7, 142); g.quadraticCurveTo(240 + s * 9, 150, 240 + s * 13, 157); } g.stroke();
-      g.globalAlpha = 0.6; g.beginPath(); for (const s of [-1, 1]) { g.moveTo(240 + s * 24, 166); g.quadraticCurveTo(240 + s * 38, 170, 240 + s * 52, 165); } g.stroke(); g.globalAlpha = 1;
-      // olhos: amêndoa grande, íris castanha, pupila e brilho; raiva = pálpebra de cima reta caindo para o nariz;
-      // dor = "> <"; K.O. = X
-      if (f === 'pain') { ink(g, 4); g.beginPath(); for (const s of [-1, 1]) { g.moveTo(240 + s * 54, 143); g.lineTo(240 + s * 26, 151); g.lineTo(240 + s * 54, 159); } g.stroke(); }
-      else if (f === 'ko') { ink(g, 4); g.beginPath(); for (const s of [-1, 1]) { const x = 240 + s * 38; g.moveTo(x - 10, 143); g.lineTo(x + 10, 159); g.moveTo(x + 10, 143); g.lineTo(x - 10, 159); } g.stroke(); }
-      else for (const s of [-1, 1]) {
-        // olho de cientista entediado: meio círculo (o de cima cortado reto, sem pálpebra), branco com a pupila preta
-        // caída no fundo; o olho direito dele um tico mais aberto (o sarcasmo). Na raiva o corte desce para o nariz
-        const cx = 240 + s * 37, cy = 149, R = 16, ang = f === 'angry';
-        const lidO = ang ? -2 : (s > 0 ? -2 : 0), lidI = ang ? 5 : (s > 0 ? -2 : 0);   // altura do corte no canto de fora / de dentro
-        const eye = () => { const ao = Math.asin(Math.max(-1, Math.min(1, lidO / R))), ai = Math.asin(Math.max(-1, Math.min(1, lidI / R)));
-          g.beginPath(); if (s > 0) { g.moveTo(cx - R * Math.cos(ai), cy + lidI); g.lineTo(cx + R * Math.cos(ao), cy + lidO); g.arc(cx, cy, R, ao, Math.PI - ai); }
-          else { g.moveTo(cx - R * Math.cos(ao), cy + lidO); g.lineTo(cx + R * Math.cos(ai), cy + lidI); g.arc(cx, cy, R, ai, Math.PI - ao); } g.closePath(); };
-        eye(); g.fillStyle = '#f7f3ea'; g.fill();
-        g.save(); eye(); g.clip();
-        g.fillStyle = '#100806'; g.beginPath(); g.arc(cx - s * 2, cy + 8, 7.5, 0, 7); g.fill();
-        g.fillStyle = '#ffffff'; g.beginPath(); g.arc(cx - s * 2 + 2.6, cy + 5, 2.1, 0, 7); g.fill(); g.restore();
-        ink(g, 2.4); eye(); g.stroke();
-        ink(g, 4.2); g.beginPath(); if (s > 0) { g.moveTo(cx - R - 1, cy + lidI); g.lineTo(cx + R + 1, cy + lidO); } else { g.moveTo(cx - R - 1, cy + lidO); g.lineTo(cx + R + 1, cy + lidI); } g.stroke();
+    function marcovFace(g, f, part) {
+      if (part === 'plate') {
+        g.strokeStyle = C.line; g.lineWidth = 2.2; g.lineCap = 'round'; g.beginPath();   // rugas da testa
+        for (const [y, x0, x1] of [[105.5, 212, 268], [110, 200, 280]]) { g.moveTo(x0, y); g.lineTo(x1, y); } g.stroke();
+        g.fillStyle = C.skinDark; for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(240 + sd * 81, 170); g.lineTo(240 + sd * 66, 198); g.lineTo(240 + sd * 42, 216); g.lineTo(240 + sd * 56, 190); g.closePath(); g.fill(); }   // plano do maxilar na sombra
+        if (f === 'pain') { ink(g, 4.5); g.beginPath(); for (const sd of [-1, 1]) { g.moveTo(240 + sd * 52, 146); g.lineTo(240 + sd * 26, 154); g.lineTo(240 + sd * 52, 162); } g.stroke(); }
+        else if (f === 'ko') { ink(g, 4.5); g.beginPath(); for (const sd of [-1, 1]) { const x = 240 + sd * 38; g.moveTo(x - 9, 145); g.lineTo(x + 9, 163); g.moveTo(x + 9, 145); g.lineTo(x - 9, 163); } g.stroke(); }
+        else for (const sd of [-1, 1]) {   // olho de desenho: branco arredondado embaixo do arco, íris castanha grande, pupila e brilho
+          const X0 = x => 240 + sd * x, lid = f === 'angry' ? 5 : 0;
+          const eye = () => { g.beginPath(); g.moveTo(X0(60), 142 + lid * 0.4); g.lineTo(X0(17), 147 + lid); g.quadraticCurveTo(X0(16), 164, X0(38), 165); g.quadraticCurveTo(X0(60), 164, X0(60), 142 + lid * 0.4); g.closePath(); };
+          eye(); g.fillStyle = '#fbf8f0'; g.fill();
+          g.save(); eye(); g.clip();
+          g.fillStyle = '#6b3d1e'; g.beginPath(); g.arc(X0(37), 153 + lid * 0.5, 10, 0, 7); g.fill();
+          g.fillStyle = '#17100c'; g.beginPath(); g.arc(X0(37), 153 + lid * 0.5, 5.4, 0, 7); g.fill();
+          g.fillStyle = '#ffffff'; g.beginPath(); g.arc(240 + sd * 37 - 3.4, 149.4 + lid * 0.5, 2.2, 0, 7); g.fill();
+          g.restore(); ink(g, 2.6); eye(); g.stroke();
+          g.strokeStyle = C.line; g.lineWidth = 2; g.beginPath(); g.moveTo(X0(46), 171); g.quadraticCurveTo(X0(56), 173, X0(64), 169); g.stroke(); }   // olheira
       }
+      if (part === 'ridge') {   // sobrancelhas grossas pintadas no arco: altas do lado de fora, caindo para o nariz
+        const tin = f === 'angry' ? 4 : f === 'pain' ? -8 : f === 'ko' ? -6 : 0, tout = f === 'angry' ? -3 : f === 'pain' ? 5 : f === 'ko' ? 4 : 0;
+        ink(g, 9); g.strokeStyle = '#1c1210'; for (const sd of [-1, 1]) { g.beginPath(); g.moveTo(240 + sd * 64, 126 + tout); g.lineTo(240 + sd * 8, 135 + tin); g.stroke(); } }
+      if (part === 'nose') { g.fillStyle = '#1c1210'; for (const sd of [-1, 1]) { g.beginPath(); g.ellipse(240 + sd * 5.8, 165, 4.8, 2.4, sd * 0.95, 0, 7); g.fill(); } }
+      if (part === 'muzzle') { g.strokeStyle = C.line; g.lineWidth = 2; g.lineCap = 'round'; g.beginPath(); g.moveTo(240, 175); g.lineTo(240, f === 'ko' ? 179 : 190); g.stroke();   // o sulco do lábio
+        if (f === 'ko') { g.fillStyle = '#3a0f12'; g.beginPath(); g.ellipse(240, 190, 16, 9, 0, 0, 7); g.fill(); g.fillStyle = '#c2475a'; g.beginPath(); g.ellipse(240, 194.5, 10, 3.6, 0, 0, 7); g.fill(); ink(g, 3.2); g.beginPath(); g.ellipse(240, 190, 16, 9, 0, 0, 7); g.stroke(); } }   // boca aberta: elipse centrada na junta do focinho com o maxilar (metade em cada peça)
+      if (part === 'jaw') {
+        if (f === 'angry') { g.fillStyle = '#f4f1e6'; g.fillRect(200, 190, 80, 13); ink(g, 1.6); g.beginPath(); for (const x of [213, 226.5, 240, 253.5, 267]) { g.moveTo(x, 190); g.lineTo(x, 203); } g.stroke(); ink(g, 3.6); g.strokeRect(200, 190, 80, 13); }
+        else if (f === 'pain') { ink(g, 4.5); g.beginPath(); g.moveTo(196, 195); for (let k = 0; k < 6; k++) g.quadraticCurveTo(203 + k * 15, k % 2 ? 201 : 189, 211 + k * 15, 195); g.stroke(); }
+        else if (f === 'ko') { g.fillStyle = '#3a0f12'; g.beginPath(); g.ellipse(240, 190, 16, 9, 0, 0, 7); g.fill(); g.fillStyle = '#c2475a'; g.beginPath(); g.ellipse(240, 194.5, 10, 3.6, 0, 0, 7); g.fill(); ink(g, 3.2); g.beginPath(); g.ellipse(240, 190, 16, 9, 0, 0, 7); g.stroke(); }
+        else { ink(g, 4.6); g.beginPath(); g.moveTo(190, 196.5); g.quadraticCurveTo(240, 192, 290, 196.5); g.stroke(); }
+        g.strokeStyle = C.line; g.lineWidth = 2.2; g.lineCap = 'round'; g.beginPath(); g.moveTo(224, 207); g.lineTo(256, 207); g.stroke(); }
     }
-    const fb = B.faceBox, drawFace = f => (g, at) => at((fb[0] + fb[2]) / 2, (fb[1] + fb[3]) / 2, fb[2] - fb[0], fb[3] - fb[1], gg => { gg.translate(-fb[0], -fb[1]); marcovFace(gg, f); }, fb[2] - fb[0], fb[3] - fb[1]);
-    const faceMat = B.faceMat; faceMat.map.dispose(); faceMat.map = B.faceTexture(drawFace('normal'));
+    const muzzleMat = paints.find(q => q.part === 'jaw').mat, muzzleTex = f => faceTex(C.skin, 'jaw', f);   // a mastigação troca a boca (no maxilar)
 
-    // ================= cabelo: casca no alto da cabeça (frente até a linha do cabelo, atrás desce pela nuca) com a
-    // faixa escura na linha, mechas espetadas no alto inclinadas para trás com um risco mais claro
-    // a casca é a própria malha da cabeça soldada e empurrada 1 px para fora: segue o ovo certinho e nunca passa do
-    // contorno dele (feita à parte ela ficava mais larga atrás e o risco preto da cabeça aparecia na bochecha)
-    { const g = headCopy(); g.computeVertexNormals(); furGeos.push(g); const p = g.attributes.position, n = g.attributes.normal, ang = [];
-      for (let i = 0; i < p.count; i++) { p.setXYZ(i, p.getX(i) + n.getX(i) * D(1), p.getY(i) + n.getY(i) * D(1), p.getZ(i) + n.getZ(i) * D(1)); ang.push(Math.atan2(p.getZ(i), p.getX(i))); }
-      g.setAttribute('ang', new THREE.Float32BufferAttribute(ang, 1)); g.setAttribute('edge', new THREE.Float32BufferAttribute(ang.map(() => 0), 1)); g.setAttribute('inner', new THREE.Float32BufferAttribute(ang.map(() => 0), 1));
-      const m = pattern(flat(C.hair), `
-        { float c = abs(cos(vAng)), sn = sin(vAng);
-          float hl = 104.0 + 34.0 * smoothstep(0.55, 0.9, c);
-          if (sn < 0.0) hl = max(hl, 108.0 + 110.0 * smoothstep(-0.05, -0.6, sn));
-          hl += 5.0 * abs(fract(vAng * 9.55) - 0.5) * 2.0;   // borda em franja, nada de corte reto
-          if (vPx.y > hl) discard; }`, 'mhair');
-      head.add(new THREE.Mesh(g, m));   // sem casca de contorno: a borda recortada deixaria um risco na testa
-    }
-    // ================= orelhas de chimpanzé: discos da cor da pele, virados meio para a frente, com o miolo mais escuro
-    for (const s of [-1, 1]) {
-      const [ex, ez] = B.surf(158, s > 0 ? -0.15 : Math.PI + 0.15), eg = new THREE.Group(); eg.position.copy(V(ex + s * 3, 158, ez)); eg.rotation.y = s * 0.4; head.add(eg);   // encostada na cabeça (afunda um tico)
-      const e = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), flat(C.skin)); e.scale.set(D(8), D(35), D(31)); eg.add(ol(e, 0.009));
-      const inner = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 18), flat(C.earIn)); inner.scale.set(D(3), D(25), D(21)); inner.position.set(D(s * 6.5), D(1), D(1)); eg.add(inner);
+    // ================= cabelo: touca escura do alto da testa até a nuca e os espetos no topo; tufos de pelo nas bochechas
+    piece([[0, 92, 8], [40, 94, 34], [46, 98, 46], [66, 106, 44], [0, 97, 50], [44, 93, -34], [0, 95, -54], [78, 108, 12], [70, 109, -44], [82, 120, 34],
+           [90, 131, 2], [74, 150, -56], [0, 126, -81], [0, 162, -84]], C.hair, 9, 0.010);
+    for (const [n, z0, h0, rr, lean] of [[7, 30, 40, 14, 3], [6, 6, 38, 14, -3], [5, -20, 30, 13, -9]])   // três fileiras de espetos, da testa à nuca
+      for (let i = 0; i < n; i++) { const k = i - (n - 1) / 2, x = k * 21, z = z0 - Math.abs(k) * 3, h = h0 + (i % 2 ? 9 : 0) - Math.abs(k) * 3, yb = 99 + Math.abs(k) * 2.2;
+        const pts = [[x - rr, yb, z - rr], [x + rr, yb, z - rr], [x - rr, yb + 1, z + rr], [x + rr, yb + 1, z + rr], [x + k * 6 + 3, yb - h, z + lean]]; swayTip(piece(pts, C.hair, 3, 0.008, false), pts); }
+    for (const sd of [-1, 1]) for (const [y, o, tx, ty, hh] of [[160, 86, 116, 170, 12], [180, 84, 118, 198, 15], [200, 76, 104, 224, 14], [214, 60, 84, 236, 11]])   // costeletas volumosas
+    { const pts = [[o, y - hh, -24], [o, y - hh, 20], [o - 8, y + hh, -20], [o - 8, y + hh, 16], [tx, ty, -2]].map(([x, yy, z]) => [sd * x, yy, z]); swayTip(piece(pts, C.fur, 3, 0.008, false), pts); }
+
+    // ================= orelhas: discos grandes em concha, virados para a frente, com o miolo escuro
+    for (const sd of [-1, 1]) {
+      const eg = new THREE.Group(); eg.position.copy(V(CX + sd * 100, 150, -6)); eg.rotation.y = sd * 0.5; head.add(eg);
+      const ring = (rx, ry, z, ox = 0) => Array.from({ length: 10 }, (_, k) => { const a = (k + 0.5) * Math.PI / 5; return new THREE.Vector3(D(ox + Math.cos(a) * rx), D(Math.sin(a) * ry), D(z)); });
+      eg.add(ol(new THREE.Mesh(roundHull([...ring(27, 35, 0), ...ring(21, 28, -10), ...ring(23, 30, 6)], 5), flat(C.skin)), 0.011));
+      eg.add(new THREE.Mesh(roundHull([...ring(15, 22, 6.5, sd * 2), ...ring(11, 17, 10, sd * 3)], 2.5), flat(C.earIn)));
     }
 
     // ================= camisa azul-petróleo: faixas escuras no alto, tela do monitor cardíaco com a linha, barrinha de
@@ -335,7 +305,7 @@ export default {
     const hands = { [-1]: new THREE.Object3D(), [1]: new THREE.Object3D() }; root.add(hands[-1], hands[1]);
     const UPV = new THREE.Vector3(0, 1, 0), FWD = new THREE.Vector3(0, 0, 1);
 
-    const setFace = f => { muzzleMat.map.dispose(); muzzleMat.map = muzzleTex(f); muzzleMat.needsUpdate = true; faceMat.map.dispose(); faceMat.map = B.faceTexture(drawFace(f)); faceMat.needsUpdate = true; };
+    const setFace = f => { for (const q of paints) { q.mat.map = faceTex(q.bg, q.part, f); q.mat.needsUpdate = true; } };
     // balanço dos pelos (topete e costeletas): cada ponta com a sua mola, puxada para trás pela aceleração da cabeça
     // (rigidez um pouco diferente em cada uma, para não balançarem em bloco); os vértices andam conforme o sm deles
     const hp = new THREE.Vector3(), hPrev = new THREE.Vector3(), hVel = new THREE.Vector3(), hAcc = new THREE.Vector3(), hq = new THREE.Quaternion();

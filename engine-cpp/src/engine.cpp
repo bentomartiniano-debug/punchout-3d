@@ -1,4 +1,5 @@
 #include "engine.hpp"
+#include "archetype.hpp"
 #include "skill_poses.hpp"
 #include "physics.hpp"
 #include <algorithm>
@@ -81,6 +82,8 @@ constexpr int kCommandWindow = 72;       // 1,2 s de histórico para comandos
 constexpr int kBothPunchesWindow = 24;   // Z + X em até 400 ms
 constexpr int kChainGap = 40;            // quadros entre o fim de um soco do combo e o próximo antes de o combo esfriar
 constexpr float kChainPunchCost = 0.6f;  // fração do fôlego que custa o soco que carrega um espaço do combo
+// (o passo à frente máximo de cada lutador fica na ficha de arquétipo: include/archetype.hpp)
+constexpr float kLungeSlack = 6.0f;     // fecha até esta folga dentro do alcance
 constexpr int kFlowWindow = 60;          // quadros, depois de uma esquiva bem feita, em que um especial de fluxo sai sem combo
 constexpr int kHealCooldown = 8 * 60;
 
@@ -353,6 +356,13 @@ void GameEngine::updateFighting(uint32_t held, uint32_t pressed, uint32_t releas
                 applyAiActionMotion(extraAction);
                 action = extraAction;
             }
+            // o soco do oponente também dá o passo à frente quando o jogador ficou um pouco além do alcance (até o limite do estilo dele)
+            if (!isPunchState(enemy.state)) enemyLungeDone_ = 0.0f;
+            else if (!enemy.hasHit && !action.checkHit && styleTraits) {
+                const float reachE = 210.0f + arch(enemy.charId).reach + ((player.isBigChar() || enemy.isBigChar()) ? 25.0f : 0.0f);
+                const float gap = (player.radius + enemy.radius) - reachE + kLungeSlack, lungeMax = arch(enemy.charId).lunge * 0.5f;   // metade do passo do jogador: o oponente ainda erra quando é empurrado para longe
+                if (gap > 0.0f && enemyLungeDone_ < lungeMax) { const float step = std::min({6.0f, gap, lungeMax - enemyLungeDone_, enemy.radius - 20.0f}); if (step > 0.0f) { enemy.radius -= step; enemyLungeDone_ += step; } }
+            }
             if (action.checkHit) checkHitOnPlayer(enemy.queuedHeavy, audio);
             else if (action.cast != SkillId::None) castSkill(enemy, player, action.cast, action.signature, audio);
         }
@@ -609,6 +619,12 @@ void GameEngine::playerHandleAction(uint32_t held, uint32_t& audio, bool allowHi
         break;
     }
 
+    // o soco dá um passo à frente sozinho se o rival ficou só um pouco além do alcance (empurrado por um golpe, por exemplo): antes o soco errava por poucos pontos
+    const float lungeMax = arch(f.charId).lunge;
+    if (allowHits && isPunchState(f.state) && p <= 0.40f && !f.hasHit && lungeDone_ < lungeMax && enemy.state != FIGHTER_DODGE_L && enemy.state != FIGHTER_DODGE_R && !isAirborne(enemy)) {
+        const float gap = (f.radius + enemy.radius) - moveReach(f.state) + kLungeSlack;
+        if (gap > 0.0f) { const float step = std::min({6.0f, gap, lungeMax - lungeDone_, f.radius - 90.0f}); if (step > 0.0f) { f.radius -= step; lungeDone_ += step; } }
+    }
     if (allowHits && isPunchState(f.state) && p > 0.40f && p < 0.70f && !f.hasHit) {
         f.hasHit = true;
         checkHitOnEnemy(f.state, f.chargeRatio, audio);
@@ -707,6 +723,7 @@ void GameEngine::executePunch(bool left, float charge, uint32_t held) {
         if (!(chainSeen_ & bit)) { chainSeen_ |= bit; chain_ = std::min(chain_ + 1, 3); }
         chainTimer_ = duration + kChainGap;
     }
+    lungeDone_ = 0.0f;
     f.startMove(move, duration);
 }
 
@@ -727,22 +744,37 @@ void GameEngine::cancelCharge() {
 // Acertos
 // ---------------------------------------------------------------------------
 
-void GameEngine::checkHitOnEnemy(FighterActionState move, float charge, uint32_t& audio) {
-    const float distance = player.radius + enemy.radius;
-
-    float reach = 220.0f, baseDamage = 8.0f, baseStun = 20.0f;
+float GameEngine::moveReach(FighterActionState move) const {
+    float reach = 220.0f;
     switch (move) {
-    case FIGHTER_JAB:       reach = 215.0f; baseDamage = 6.0f;  baseStun = 16.0f; break;
-    case FIGHTER_CROSS:     reach = 220.0f; baseDamage = 8.0f;  baseStun = 20.0f; break;
-    case FIGHTER_HOOK:      reach = 215.0f; baseDamage = 10.0f; baseStun = 24.0f; break;
-    case FIGHTER_BODY_BLOW: reach = 215.0f; baseDamage = 10.0f; baseStun = 28.0f; break;
-    case FIGHTER_UPPER:     reach = 200.0f; baseDamage = 14.0f; baseStun = 38.0f; break;
+    case FIGHTER_JAB:       reach = 215.0f; break;
+    case FIGHTER_CROSS:     reach = 220.0f; break;
+    case FIGHTER_HOOK:      reach = 215.0f; break;
+    case FIGHTER_BODY_BLOW: reach = 215.0f; break;
+    case FIGHTER_UPPER:     reach = 200.0f; break;
     default: break;
     }
+    reach += arch(player.charId).reach; // braço de cada estilo
     if (player.isBigChar()) reach += 20.0f; // compensa o porte maior e idleRadius recuado (138 vs 115..125)
     if (enemy.isBigChar())  reach += 15.0f; // oponente grandalhão tem silhueta/hurtbox mais ampla e próxima
     if (enemy.state == FIGHTER_HIT || enemy.vulnerable > 0) reach += 30.0f; // brecha e hitstun: combos conectam com firmeza
     if ((player.charId == 2 || player.loadout.has(SkillId::JoanaAsymmetricArms)) && (player.isLeftPunch || move == FIGHTER_JAB || move == FIGHTER_BODY_BLOW)) reach *= 1.40f; // gancho de marujo
+    return reach;
+}
+
+void GameEngine::checkHitOnEnemy(FighterActionState move, float charge, uint32_t& audio) {
+    const float distance = player.radius + enemy.radius;
+
+    float baseDamage = 8.0f, baseStun = 20.0f;
+    switch (move) {
+    case FIGHTER_JAB:       baseDamage = 6.0f;  baseStun = 16.0f; break;
+    case FIGHTER_CROSS:     baseDamage = 8.0f;  baseStun = 20.0f; break;
+    case FIGHTER_HOOK:      baseDamage = 10.0f; baseStun = 24.0f; break;
+    case FIGHTER_BODY_BLOW: baseDamage = 10.0f; baseStun = 28.0f; break;
+    case FIGHTER_UPPER:     baseDamage = 14.0f; baseStun = 38.0f; break;
+    default: break;
+    }
+    const float reach = moveReach(move);
 
     const bool enemyAirborne = isAirborne(enemy);
     const bool enemyDodging = (distance > reach || enemy.state == FIGHTER_DODGE_L || enemy.state == FIGHTER_DODGE_R || enemyAirborne);
@@ -751,6 +783,7 @@ void GameEngine::checkHitOnEnemy(FighterActionState move, float charge, uint32_t
         cue(Sfx::Dodge);
         if (enemy.state == FIGHTER_DODGE_L || enemy.state == FIGHTER_DODGE_R) {
             cue(Sfx::CrowdWoah); // a plateia reage à esquiva do oponente
+            dodgeReward(enemy, player);
         }
         if (player.isSluggish) player.vulnerable = 28;
         if (enemyDodging && enemy.loadout.has(SkillId::JackBeekeeper)) {
@@ -829,7 +862,7 @@ void GameEngine::checkHitOnEnemy(FighterActionState move, float charge, uint32_t
         hitstopTimer = std::max(hitstopTimer, stop);
         if (!trainingMode && enemy.charId != 9) {
             if (isHeavy || move == FIGHTER_HOOK || move == FIGHTER_CROSS) {
-                enemy.radius = std::min(235.0f, enemy.radius + (isHeavy ? 16.0f : 8.0f));
+                enemy.radius = std::min(235.0f, enemy.radius + (isHeavy ? 16.0f : 8.0f) * arch(player.charId).pushMul);
                 if (enemy.radius >= 225.0f) {
                     cue(Sfx::CrowdGasp); // mandou o oponente para as cordas! Suspiro tenso ("Ooooh!")
                 }
@@ -862,6 +895,8 @@ void GameEngine::checkHitOnEnemy(FighterActionState move, float charge, uint32_t
     }
 
     damage = resolveDamage(player, enemy, damage, move, charge > 0.5f || move == FIGHTER_UPPER, move == FIGHTER_JAB);
+    if (arch(player.charId).punchPush > 0.0f && !trainingMode && enemy.charId != 9 && !enemy.loadout.has(SkillId::MarcovZeroGravity))
+        enemy.radius = std::min(235.0f, enemy.radius + arch(player.charId).punchPush); // zoneadora: todo soco limpo afasta o rival
     if (charge > 0.5f && player.loadout.has(SkillId::MarcovThrusterCharge)) player.stamina = std::min(player.maxStamina, player.stamina + 20.0f);
     if (player.charId == 7) player.stamina = std::min(player.maxStamina, player.stamina + 3.0f); // Marcov: recarga cinética
     if (move == FIGHTER_UPPER && enemy.loadout.has(SkillId::MarcovZeroGravity)) enemy.radius -= 40.0f; // imune a empurrão
@@ -900,7 +935,7 @@ void GameEngine::checkHitOnEnemy(FighterActionState move, float charge, uint32_t
 }
 
 void GameEngine::checkHitOnPlayer(bool heavy, uint32_t& audio) {
-    float maxReach = 210.0f;
+    float maxReach = 210.0f + arch(enemy.charId).reach;
     if (player.isBigChar() || enemy.isBigChar()) maxReach += 25.0f;
     if (player.radius + enemy.radius > maxReach) return;
 
@@ -924,6 +959,7 @@ void GameEngine::checkHitOnPlayer(bool heavy, uint32_t& audio) {
             enemy.vulnerable = std::max(enemy.vulnerable, heavy ? 28 : 20);
             combat.spawnFloatingText("BRECHA!", 0x00f0ffff, enemy.worldPos.x, enemy.worldPos.y + 110.0f, enemy.worldPos.z, true, 0);
         }
+        if (playerDodging) dodgeReward(player, enemy);
         // O Cremoso: Vingança Doce — esquiva perfeita cura 2 e carrega +15% no próximo soco.
         if (playerDodging && (player.charId == 3 || player.loadout.has(SkillId::CremosoSweetRevenge))) {
             heal(player, 2.0f);
@@ -1007,12 +1043,13 @@ void GameEngine::checkHitOnPlayer(bool heavy, uint32_t& audio) {
         cue(Sfx::CrowdGasp); // Soco limpo do oponente faz a plateia reagir imediatamente!
     }
     if (heavyImpact || enemy.queuedAttack == FIGHTER_HOOK || enemy.queuedAttack == FIGHTER_CROSS) {
-        const float push = heavy ? 20.0f : 12.0f;
+        const float push = (heavy ? 20.0f : 12.0f) * arch(enemy.charId).pushMul;
         player.radius = std::min(235.0f, player.radius + push);
         if (player.radius >= 170.0f || push >= 15.0f) {
             cue(Sfx::CrowdGasp); // Mandou o jogador em direção às cordas! Suspiro tenso da arena ("Ooooh!")
         }
     }
+    if (arch(enemy.charId).punchPush > 0.0f) player.radius = std::min(235.0f, player.radius + arch(enemy.charId).punchPush); // zoneadora: todo soco limpo afasta
     screenShake = std::max(screenShake, 25.0f);
     // Hitstop escalonado: 8 frames para golpes normais, 12 para pesados
     hitstopTimer = std::max(hitstopTimer, heavy ? 11 : 6);
@@ -1760,7 +1797,7 @@ void GameEngine::updateSkillMove(Fighter& caster, Fighter& target, uint32_t& aud
         } else if (targetUp) {
             switch (id) {
             case SkillId::JackStingJab:
-                if (p >= 0.45f) { caster.skillEventDone = true; skillDamage(caster, target, 15.0f, "", audio); }
+                if (p >= 0.45f) { caster.skillEventDone = true; if (skillDamage(caster, target, 15.0f, "", audio)) target.status.infested = std::max(target.status.infested, 150); }   // a Agulhada marca o alvo: o enxame vai atrás
                 break;
             case SkillId::FrogSwampSpout:
                 if (p >= 0.45f) {
@@ -1984,6 +2021,7 @@ bool GameEngine::skillDamage(Fighter& caster, Fighter& target, float damage, con
             combat.spawnFloatingText("BRECHA!", 0x00f0ffff, enemy.worldPos.x, enemy.worldPos.y + 110.0f, enemy.worldPos.z, true, 0);
         }
 
+        if (isDodging) dodgeReward(target, caster);
         if (isDodging && (target.charId == 3 || target.loadout.has(SkillId::CremosoSweetRevenge))) {
             heal(target, 2.0f);
             target.revengeBonus = 1.15f;
@@ -2049,6 +2087,10 @@ bool GameEngine::skillDamage(Fighter& caster, Fighter& target, float damage, con
         }
     }
 
+    // estocadas, cada uma com o seu efeito: a do Cremoso pune quem está na guarda; a da Vivaldi cresce com a sequência de acertos
+    if (caster.activeSkill == SkillId::CremosoConePunch && blocked) damage += 6.0f;
+    if (caster.activeSkill == SkillId::VivaldiCrescendoJab) damage = 11.0f + 2.0f * static_cast<float>(std::min(4, caster.isPlayer ? comboCount : caster.rhythmStacks));
+    damage = std::round(damage * arch(caster.charId).dealt * arch(target.charId).taken); // estilo de cada um (canhão de vidro)
     damage = applyStatusDefense(target, caster, damage);
     if (trainingMode || target.charId == 9) {
         target.hp = std::max(1.0f, target.hp - damage);
@@ -2238,6 +2280,9 @@ float GameEngine::applyStatusDefense(Fighter& defender, Fighter& attacker, float
 float GameEngine::resolveDamage(Fighter& attacker, Fighter& defender, float damage, FighterActionState move, bool heavy, bool jab) {
     damage = applyAttackerTraits(attacker, damage, move);
     damage = applyDefenderTraits(defender, damage, combat, slipperyChance, heavy, jab);
+    damage = std::round(damage * arch(attacker.charId).dealt * arch(defender.charId).taken); // estilo de cada um (canhão de vidro)
+    if (arch(attacker.charId).beePerPunch > 0 && !defender.isDummy()) // enxame: cada soco limpo deixa abelhas no rival, até o teto
+        defender.status.infested = std::min(std::max(kBeeCap, defender.status.infested), defender.status.infested + arch(attacker.charId).beePerPunch);
     if (attacker.status.molasses > 0) {
         // Modo Melaço: removeu corte de dano próprio; aplica slow cumulativo no rival a cada golpe
         defender.status.slowed = std::min(6 * 60, defender.status.slowed + 60);
@@ -2254,7 +2299,7 @@ float GameEngine::resolveDamage(Fighter& attacker, Fighter& defender, float dama
     if (attacker.revengeBonus > 1.0f) {
         damage = std::round(damage * attacker.revengeBonus);
         attacker.revengeBonus = 1.0f;
-        combat.triggerStatusBanner("¡VINGANÇA DOCE! (+15% DANO)");
+        combat.triggerStatusBanner(attacker.charId == 2 ? "¡CONTRA-GOLPE DA GARRA! (+25% DANO)" : "¡VINGANÇA DOCE! (+15% DANO)");
     }
     damage = applyStatusDefense(defender, attacker, damage);
     if (attacker.hp <= 0.0f && attacker.state != FIGHTER_KNOCKDOWN && gameState == STATE_FIGHTING) {
@@ -2262,6 +2307,30 @@ float GameEngine::resolveDamage(Fighter& attacker, Fighter& defender, float dama
         triggerKnockdown(&attacker == &enemy, audio); // morreu nos espinhos/calor do outro
     }
     return damage;
+}
+
+// O que cada lutador ganha ao esquivar de um golpe (Jack e Cremoso já tinham a deles: abelha do Apicultor e Vingança Doce).
+void GameEngine::dodgeReward(Fighter& dodger, Fighter& attacker) {
+    if (!styleTraits) return;
+    const bool mine = dodger.isPlayer;   // a IA esquiva muito mais vezes que o jogador: a recompensa dela é menor
+    const auto say = [&](const char* txt, uint32_t color) { combat.spawnFloatingText(txt, color, dodger.worldPos.x, dodger.worldPos.y + 128.0f, dodger.worldPos.z, false, 0); };
+    switch (dodger.charId) {
+    case 1: // King Frog (armadilheiro): quem erra nele sai lento
+        attacker.status.slowed = std::max(attacker.status.slowed, mine ? 120 : 45); say("VISGO!", 0x9be33aff); break;
+    case 2: // Joana (pesada): o próximo soco bate +25%
+        dodger.revengeBonus = 1.25f; say("GARRA ARMADA!", 0xff4b3eff); break;
+    case 4: // Valéria (canhão de vidro): a brasa pega em quem errou
+        attacker.status.burn = std::max(attacker.status.burn, mine ? 90 : 60); attacker.status.burnDps = std::max(attacker.status.burnDps, 2.0f); say("BRASA!", 0xff6a14ff); break;
+    case 5: // Vivaldi (zoneadora): abre espaço, empurrando o rival
+        if (!attacker.loadout.has(SkillId::MarcovZeroGravity) && !trainingMode && attacker.charId != 9) attacker.radius = std::min(235.0f, attacker.radius + 50.0f);
+        say("ESPAÇO!", 0xb48cffff); break;
+    case 6: // Lady Espinha (retaliadora): quem erra nela se fura
+        if (!attacker.isDummy()) attacker.hp = std::max(1.0f, attacker.hp - (mine ? 4.0f : 2.0f));
+        combat.spawnFloatingText(mine ? "-4 ESPINHO!" : "-2 ESPINHO!", 0x16a34aff, attacker.worldPos.x, attacker.worldPos.y + 90.0f, attacker.worldPos.z, false, 0); break;
+    case 7: // Marcov (controlador): recupera fôlego
+        dodger.stamina = std::min(dodger.maxStamina, dodger.stamina + 15.0f); dodger.staminaRegenDelay = 0; say("+FÔLEGO", 0x4fc3ffff); break;
+    default: break;
+    }
 }
 
 bool GameEngine::isAirborne(const Fighter& f) const {

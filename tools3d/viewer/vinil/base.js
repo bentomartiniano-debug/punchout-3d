@@ -23,20 +23,23 @@ export function valeriaBody(U, o) {
   const { X, Y, D, S, FOOT, loft } = U, H = o.head, K = o.yoke, cx = o.cx;
   const span = K.y1 - K.y0;
   // ovo do rosto: largura a em cima, afina da metade para baixo até o queixo (fb)
-  const faceA = y => { const t = (y - H.top) / (H.bot - H.top), lo = Math.max(0, (t - 0.45) / 0.55); return H.a * Math.sqrt(Math.max(0.02, 1 - Math.min(1, lo) ** 2 * 0.92)); };
+  // (o.faceA troca o ovo por outro perfil, por exemplo o rosto anguloso do Marcov; o.headPw deixa o corte da cabeça mais quadrado)
+  const faceA = o.faceA || (y => { const t = (y - H.top) / (H.bot - H.top), lo = Math.max(0, (t - 0.45) / 0.55); return H.a * Math.sqrt(Math.max(0.02, 1 - Math.min(1, lo) ** 2 * 0.92)); });
+  const hp = o.headPw || o.pw;
   const yokeA = y => K.a0 + (K.a1 - K.a0) * Math.pow(ss(K.y0, K.y1, y), 1.6);
   const neckZ = y => K.cz + (H.cz - 8 * H.a / 56) * (1 - ss(K.y0 - 2 * span / 26, K.y1 + 2 * span / 26, y));
   // perfil inteiro da cabeça (a cúpula de cima que o loft fecha + o ovo) e a frente dela, para assentar peças no rosto
   const domeH = 0.9 * Math.min(H.a * H.d, H.a);
   const headA = y => { if (y < H.top) { const t = (H.top - y) / domeH; return t >= 1 ? 0 : H.a * Math.sqrt(1 - t * t); } return y <= K.y0 ? faceA(y) : Math.max(faceA(y), yokeA(y)); };
-  const headZ = (x, y) => { const a = headA(y); if (a < 1) return H.cz; const c = Math.min(1, Math.abs(x - cx) / a); return H.cz + a * H.d * Math.sqrt(1 - c * c); };
+  const headZ = (x, y) => { const a = headA(y); if (a < 1) return H.cz; const c = Math.min(1, Math.abs(x - cx) / a); return H.cz + a * H.d * Math.pow(1 - Math.pow(c, hp), 1 / hp); };
   const out = { faceA, yokeA, neckZ, headA, headZ, headTop: H.top - domeH };
   // ponto exato da superfície do ovo (rosto, pescoço e ombros) na altura y e no ângulo th (0 = +x, π/2 = frente), em
   // px [x, z]; e o mesmo ponto afastado off px pela normal (para peças que vestem a cabeça sem atravessar)
   {
-    const sp = v => Math.sign(v) * Math.pow(Math.abs(v), 2 / o.pw), b0 = K.y0 - 4 * span / 26, b1 = K.y0 + 16 * span / 26;
+    const b0 = K.y0 - 4 * span / 26, b1 = K.y0 + 16 * span / 26;
+    const sp = (v, y) => Math.sign(v) * Math.pow(Math.abs(v), 2 / (y < H.top ? hp : hp + (o.pw - hp) * ss(b0, b1, y)));   // a cabeça pode ser mais quadrada que o pescoço
     out.surf = (y, th) => {
-      const a = Math.max(0.01, headA(y)), x = cx + a * sp(Math.cos(th)), z0 = H.cz + a * H.d * sp(Math.sin(th));
+      const a = Math.max(0.01, headA(y)), x = cx + a * sp(Math.cos(th), y), z0 = H.cz + a * H.d * sp(Math.sin(th), y);
       const k = y < H.top ? 0 : ss(b0, b1, y); if (!k) return [x, z0];
       const want = neckZ(y) + (z0 - H.cz) / (H.d * a) * K.d * yokeA(y); return [x, z0 + (want - z0) * k];
     };
@@ -53,9 +56,9 @@ export function valeriaBody(U, o) {
   const s = H.a / 56, box = [cx - 70 * s, H.top - 31 * s, cx + 70 * s, H.top + 109 * s];
   {
     const rows = [];
-    for (let y = H.top; y <= K.end; y += 2 * s) { const a = Math.max(faceA(y), yokeA(y)); rows.push({ y, l: cx - a, r: cx + a }); }
     const b0 = K.y0 - 4 * span / 26, b1 = K.y0 + 16 * span / 26;   // onde o rosto vira pescoço (sem "bola" de queixo)
-    const g = loft(rows, { depth: H.d, cz: H.cz, NA: 48, capTop: true, capBot: false, pw: o.pw,
+    for (let y = H.top; y <= K.end; y += 2 * s) { const a = Math.max(faceA(y), yokeA(y)); rows.push({ y, l: cx - a, r: cx + a, pw: hp + (o.pw - hp) * ss(b0, b1, y) }); }
+    const g = loft(rows, { depth: H.d, cz: H.cz, NA: 48, capTop: true, capBot: false, pw: hp,
       zFn: (x, y, z) => { const k = ss(b0, b1, y); if (!k) return z; const a = Math.max(faceA(y), yokeA(y)), want = neckZ(y) + (z - H.cz) / (H.d * a) * K.d * yokeA(y); return z + (want - z) * k; } });
     const uv = [], p = g.attributes.position;
     for (let i = 0; i < p.count; i++) uv.push((p.getX(i) * S + cx - box[0]) / (box[2] - box[0]), 1 - (FOOT - p.getY(i) * S - box[1]) / (box[3] - box[1]));

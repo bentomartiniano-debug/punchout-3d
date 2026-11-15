@@ -288,15 +288,17 @@ int main(int argc, char** argv) {
         // soco reto: enquanto o oponente está no soco ou no especial, ele fica no lugar e na direção em que começou. Se a jogadora esquiva (o ringue gira
         // com ela e com a câmera), o golpe passa reto e ela aparece de lado para ele; quando o golpe acaba ele gira e volta a ficar de frente. No aviso
         // (antes do soco) ele ainda acompanha. É só desenho: o acerto continua decidido pelo motor.
+        float lagVelP = 0.f, lagVelE = 0.f;   // velocidade com que cada atraso volta a zero: mola amortecida, sai devagar e chega devagar (multiplicar por um fator dava um tranco no começo)
         float turnLagP = 0.f;   // o mesmo para o jogador: no meio de um soco ou especial ele não gira com a esquiva do oponente (termina o golpe em linha reta), e a câmera fica com ele
         float turnLagE = 0.f, ringPrev = 0.f, yawOffP = 0.f, yawOffE = 0.f;   // turnLagE: quanto o oponente ficou para trás do giro do ringue; yawOff: giro de cada um por cima da direção do motor
         const auto tickSmooth = [&](bool reset) {
-            const float ring = engine.ringAngle; if (reset) { turnLagE = turnLagP = yawOffP = yawOffE = 0.f; ringPrev = ring; }
+            const float ring = engine.ringAngle; if (reset) { turnLagE = turnLagP = yawOffP = yawOffE = lagVelP = lagVelE = 0.f; ringPrev = ring; }
+            const auto ease = [](float& x, float& v) { constexpr float w = 0.13f; v += -w * w * x - 2.f * w * v; x += v; if (std::fabs(x) < 0.002f && std::fabs(v) < 0.002f) x = v = 0.f; };
             const float d = ring - ringPrev; ringPrev = ring;
             const Fighter& e = engine.enemy; const bool committed = engine.gameState == STATE_FIGHTING && (isPunchState(e.state) || e.state == FIGHTER_SKILL);
-            if (committed) turnLagE = std::clamp(turnLagE - d, -1.75f, 1.75f); else { turnLagE *= 0.86f; if (std::fabs(turnLagE) < 0.002f) turnLagE = 0.f; }
+            if (committed) { turnLagE = std::clamp(turnLagE - d, -1.75f, 1.75f); lagVelE = 0.f; } else ease(turnLagE, lagVelE);
             const Fighter& pl = engine.player; const bool committedP = engine.gameState == STATE_FIGHTING && ((isPunchState(pl.state) && !pl.hasHit) || (pl.state == FIGHTER_SKILL && !pl.skillEventDone));   // só até o golpe bater: na volta do braço ele já se vira de novo (senão quem emenda socos nunca realinha)
-            if (committedP) turnLagP = std::clamp(turnLagP - d, -1.75f, 1.75f); else { turnLagP *= 0.8f; if (std::fabs(turnLagP) < 0.002f) turnLagP = 0.f; }
+            if (committedP) { turnLagP = std::clamp(turnLagP - d, -1.75f, 1.75f); lagVelP = 0.f; } else ease(turnLagP, lagVelP);
             Fighter fp = engine.player, fe = e;
             if (turnLagP != 0.f) { const float r = std::hypot(fp.worldPos.x, fp.worldPos.z), a = std::atan2(fp.worldPos.x, fp.worldPos.z) + turnLagP; fp.worldPos.x = r * std::sin(a); fp.worldPos.z = r * std::cos(a); }
             if (turnLagE != 0.f) { const float r = std::hypot(fe.worldPos.x, fe.worldPos.z), a = std::atan2(fe.worldPos.x, fe.worldPos.z) + turnLagE; fe.worldPos.x = r * std::sin(a); fe.worldPos.z = r * std::cos(a); }
@@ -304,7 +306,7 @@ int main(int argc, char** argv) {
             const auto wrap = [](float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; };
             const glm::vec3 pp = rigPos(fp), pe = rigPos(fe); const glm::vec2 dir(pe.x - pp.x, pe.z - pp.z); const bool far = glm::length(dir) > 0.05f;
             const float wantP = far ? wrap(std::atan2(-dir.x, dir.y) - fp.facing) : 0.f, wantE = far ? wrap(std::atan2(dir.x, -dir.y) - fe.facing) : 0.f;
-            if (committedP) yawOffP = wrap(yawOffP - d); else yawOffP += (wantP - yawOffP) * 0.3f; if (committed) yawOffE = wrap(yawOffE - d); else yawOffE += (wantE - yawOffE) * 0.3f;
+            if (committedP) yawOffP = wrap(yawOffP - d); else yawOffP += (wantP - yawOffP) * 0.14f; if (committed) yawOffE = wrap(yawOffE - d); else yawOffE += (wantE - yawOffE) * 0.14f;
             if (turnLagE == 0.f && turnLagP == 0.f && !committed && !committedP) { if (std::fabs(yawOffP) < 0.002f) yawOffP = 0.f; if (std::fabs(yawOffE) < 0.002f) yawOffE = 0.f; }
             fp.facing += yawOffP; fe.facing += yawOffE;
             smoothP.tick(fp); smoothE.tick(fe); };
@@ -314,6 +316,7 @@ int main(int argc, char** argv) {
             if (audioOn && !previewing) { audio.setFightPaused(false); audio.stopVersusSounds(); audio.stopFightSounds(); audio.setMusicPitch(1.f); audio.setMusicDuck(1.f); audio.play(Sfx::Bell); audio.play(Sfx::AnnouncerKorama); audio.setMusic(charTrack(engine.enemy.charId, engine.enemy.bossStage)); }
             if (snap && std::getenv("KORAMA3D_WEAK_PLAYER")) engine.player.hp = 3.f;   // conferência: a jogadora cai no primeiro golpe
             if (snap && std::getenv("KORAMA3D_LAST_KD_P")) engine.playerKnockdowns = GameEngine::kKnockdownsForTko - 1;   // conferência: a próxima queda do jogador encerra a luta
+            if (const char* b = snap ? std::getenv("KORAMA3D_BOSS") : nullptr) engine.enemy.bossStage = std::atoi(b);   // conferência: forma do Batalhator (1 a 3)
             if (snap && std::getenv("KORAMA3D_NODEF")) engine.ai.defenseChance = 0.f;   // conferência: o oponente não defende nem esquiva
             if (const char* ring = snap ? std::getenv("KORAMA3D_RING") : nullptr) engine.ringAngle = float(std::atof(ring));   // conferência: ângulo do ringue (quina em 0,785)
             if (snap && std::getenv("KORAMA3D_WEAK_ENEMY")) engine.enemy.hp = 5.f;

@@ -167,7 +167,45 @@ Conferência por imagem: `KORAMA3D_NODEF` (oponente não defende), `KORAMA3D_NOH
 
 ---
 
-## Etapa 4: recompensa da esquiva
+## Alcance com passo à frente e arquétipos (FEITO, sem commit)
+
+**Passo à frente.** O soco errava por poucos pontos quando o rival tinha sido empurrado por um golpe. Agora, antes de bater, o soco dá um passo à frente sozinho (6 por quadro) se o rival ficou um pouco além do alcance; não dá o passo se ele está esquivando ou no ar. O oponente faz o mesmo com metade do passo.
+
+**Ficha de arquétipo** (`include/archetype.hpp`), valendo sem habilidade equipada:
+
+| Lutador | Arquétipo | Alcance | Passo | Dano que causa | Dano que leva | Traço |
+|---|---|---|---|---|---|---|
+| Jack | Enxame | 0 | 40 | 1,00 | 1,00 | cada soco limpo deixa 20 quadros de enxame no rival (teto 240) |
+| King Frog | Armadilheiro | 0 | 25 | 1,00 | 1,00 | quem erra nele fica lento |
+| Joana | Pesada | -10 | 60 | 1,00 | 1,00 | a esquiva carrega +25% no próximo soco |
+| Cremoso | Contra-atacador | 0 | 30 | 1,00 | 1,00 | Vingança Doce (já existia) |
+| Valéria | Canhão de vidro | -5 | 55 | 1,25 | 1,20 | a esquiva deixa o rival queimando |
+| Vivaldi | Zoneadora | +30 | 15 | 1,00 | 1,00 | todo soco limpo afasta o rival 10; a esquiva afasta 50 |
+| Lady Espinha | Retaliadora | 0 | 40 | 1,00 | 1,00 | quem erra nela se fura |
+| Marcov | Controlador de posição | -5 | 40 | 1,00 | 1,00 | empurrão dos socos pesados ×1,5; a esquiva devolve 15 de fôlego |
+
+**Recompensa da esquiva** (substitui a Etapa 4; `GameEngine::dodgeReward`). Para a IA, que esquiva bem mais vezes, a recompensa é menor: Frog 45 quadros de lentidão em vez de 120, Valéria 60 de queimadura em vez de 90, Espinha 2 de dano em vez de 4.
+
+**Estocadas, cada uma com o seu efeito** (todas continuam ignorando a guarda, 15 de dano base):
+- Jack: marca o alvo (o enxame fica nele por 2,5 s).
+- Cremoso: 21 em quem estiver na guarda.
+- Valéria: deixa queimando (2 HP/s por 2 s).
+- Vivaldi: 11 de dano, +2 por acerto seguido (até 19).
+- Espinha: sangramento por 2 s.
+- Marcov: joga para as cordas e tira 15 de fôlego.
+
+**Combo de entrada de cada rival** (`EnemyAI::beginSkill`): cada um usa golpes e tempos de aviso próprios em vez de sempre jab, direto e gancho (Jack: dois jabs rápidos e gancho; Marcov: direto, corpo e uppercut, lentos; e assim por diante).
+
+**Medição** (`korama_tests --estilos`, e `--estilos off` para comparar sem os estilos): mesmo roteiro de socos para todos, sem defender.
+- Valéria na mão do jogador: causa 251 em vez de 216 e leva 227 em vez de 181.
+- Como rivais, depois dos ajustes: Jack e Vivaldi iguais ao que eram; Valéria e Espinha batem mais (253 e 228 contra 181 e 192); o Frog ficou o mais duro (o jogador causa 216 e leva 260).
+- Os testes de regra básica rodam com `styleTraits = false`; os estilos têm um teste próprio.
+
+**Fica para depois:** curas e modos diferenciados, os especiais de status, e a Vivaldi atingindo de longe com os especiais.
+
+---
+
+## Etapa 4 (substituída pela recompensa da esquiva por lutador, acima): recompensa da esquiva
 
 - Logo depois de uma esquiva que evita um golpe, abre uma janela curta (cerca de 20 quadros) de contra-ataque. O primeiro soco nessa janela causa mais dano e não pode ser defendido, porque você está de lado.
 - Esquivar dentro dessa janela também conta como abertura para os especiais do nível "fluxo", como na proposta.

@@ -81,7 +81,8 @@ struct BeeFx : FxGeo {
     bool on() const { return t >= 0; }
     // hive: as duas colmeias (luvas); head/chest: do rival
     void tick(const Fighter& me, const Fighter& foe, const glm::vec3& hiveL, const glm::vec3& hiveR, const glm::vec3& head, const glm::vec3& chest, float sz, Particles& P) {
-        const bool in = casting(me); if (in && !was) { t = 0; for (int i = 0; i < kN; i++) { b[i] = Bee{}; b[i].p = i % 2 ? hiveL : hiveR; } } was = in;
+        const bool in = casting(me), swarm = me.charId == 0 && foe.status.infested > 0;   // o enxame também vem dos socos do Jack
+        if ((in && !was) || (t < 0 && swarm)) { t = in ? 0 : 6; for (int i = 0; i < kN; i++) { b[i] = Bee{}; b[i].p = i % 2 ? hiveL : hiveR; } } was = in;
         if (t < 0) return; t++; T += 1.f / 60.f; size = sz; const bool stay = in || (me.charId == 0 && foe.status.infested > 0); bool any = false;
         for (int i = 0; i < kN; i++) { Bee& q = b[i]; const glm::vec3 home = i % 2 ? hiveL : hiveR, prev = q.p; const float fi = float(i);
             if (stay && !q.out && t >= 5 + i * 2) q.out = true; if (!stay) q.out = false;

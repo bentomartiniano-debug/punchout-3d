@@ -3,6 +3,7 @@
 
 #include "bridge_types.h"
 #include "fighter.hpp"
+#include "archetype.hpp"
 #include "combat.hpp"
 #include "particles.hpp"
 #include "ai.hpp"
@@ -42,7 +43,9 @@ public:
     // Nocaute final: quadro do fim da luta e quadro em que o perdedor bateu nas cordas (0 = ainda não).
     // Ficam no estado para o voo do perdedor sair igual ao vivo e no replay.
     uint32_t matchEndFrame = 0, koRopeFrame = 0;
-    bool koBySkill = false;   // a última queda veio de um especial (ou golpe-assinatura) de quem ficou de pé
+    bool koBySkill = false;
+    bool styleTraits = true;   // estilo de cada lutador (include/archetype.hpp); os testes de regra básica desligam
+    const Archetype& arch(uint32_t charId) const { static const Archetype neutral{"", 0.0f, 40.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0}; return styleTraits ? archetypeOf(charId) : neutral; }   // a última queda veio de um especial (ou golpe-assinatura) de quem ficou de pé
     GameStateEnum gameState = STATE_TITLE;
     float matchTime = 0.0f;
     float ringAngle = 0.0f;
@@ -171,6 +174,10 @@ private:
     int bufferedHand_ = -1; // -1 nenhum, 0 esquerda, 1 direita
     // combo de entrada dos especiais: jab, direto e gancho, nessa ordem (PLANO-COMBOS-E-ESQUIVA.md, etapa 3)
     int chain_ = 0;        // socos do combo já dados
+    void dodgeReward(Fighter& dodger, Fighter& attacker);   // o que cada lutador ganha ao esquivar de um golpe (arquétipo)
+    float enemyLungeDone_ = 0.0f;   // o mesmo passo, do oponente
+    float lungeDone_ = 0.0f;   // quanto o jogador já deu de passo à frente no soco atual (limite kLungeMax)
+    float moveReach(FighterActionState move) const;   // alcance do soco do jogador agora (soma dos raios)
     bool chainCast_ = false;   // o especial que está sendo lançado veio do combo ou do fluxo (não cobra fôlego de novo)
     uint32_t chainSeen_ = 0;   // quais socos (golpe + mão) já entraram no combo
     int chainTimer_ = 0;   // quadros até o combo esfriar

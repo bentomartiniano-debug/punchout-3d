@@ -457,7 +457,9 @@ void Renderer::water(const std::vector<float>& verts, const std::vector<unsigned
 }
 unsigned Renderer::texture(const unsigned char* rgba, int w, int h) {
     GLuint t; glGenTextures(1, &t); glBindTexture(GL_TEXTURE_2D, t); glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-    glGenerateMipmap(GL_TEXTURE_2D); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); glBindTexture(GL_TEXTURE_2D, 0); return t;
+    glGenerateMipmap(GL_TEXTURE_2D); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, 0x84FE /* GL_TEXTURE_MAX_ANISOTROPY */, 16.f);   // peças assadas em textura quadrada têm texels esticados (ex.: faixa da sobrancelha): sem isto o mip borra o desenho
+    glBindTexture(GL_TEXTURE_2D, 0); return t;
 }
 void Renderer::props(const std::vector<float>& verts, const std::vector<unsigned>& idx, unsigned tex, float alpha) {
     if (!propVao_) { GLuint va, vb, ib; glGenVertexArrays(1, &va); glGenBuffers(1, &vb); glGenBuffers(1, &ib); propVao_ = va; propVbo_ = vb; propIbo_ = ib; glBindVertexArray(va); glBindBuffer(GL_ARRAY_BUFFER, vb); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib);

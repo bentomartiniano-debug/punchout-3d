@@ -34,6 +34,7 @@ GameEngine freshMatch() {
     e.startMatch(0, 1, false, 1);
     e.enemy.radius = 50.0f;
     e.enemy.actionTimer = 1000000;
+    e.styleTraits = false;     // regras básicas, sem o estilo de cada lutador (testado à parte)
     e.ai.defenseChance = 0.0f; // sem defesa reativa nos testes determinísticos
     e.ai.useSkills = false;    // e sem habilidades da IA
     e.slipperyChance = 0.0f;   // e sem a pele mucosa aleatória
@@ -49,6 +50,7 @@ GameEngine skillMatch(uint32_t playerChar, SkillLoadout loadout) {
     e.startMatch(playerChar, playerChar == 0 ? 1 : 0, false, 1, &loadout);
     e.enemy.radius = 50.0f;
     e.enemy.actionTimer = 1000000;
+    e.styleTraits = false;
     e.ai.defenseChance = 0.0f;
     e.ai.useSkills = false;
     e.slipperyChance = 0.0f;
@@ -454,6 +456,7 @@ GameEngine bossMatch() {
     e.startMatch(0, 8, false, 1);
     e.enemy.radius = 50.0f;
     e.enemy.actionTimer = 1000000;
+    e.styleTraits = false;
     e.ai.defenseChance = 0.0f;
     e.ai.useSkills = false;
     e.slipperyChance = 0.0f;
@@ -958,6 +961,31 @@ void testFighterSizeCategories() {
 
 } // namespace
 
+// Estilo de cada lutador (include/archetype.hpp): canhão de vidro, enxame, zoneadora e o passo à frente do soco.
+void testArchetypes() {
+    {   // Valéria bate 25% mais forte: jab de 6 vira 8
+        GameEngine e = skillMatch(4, SkillLoadout{}); e.styleTraits = true;
+        const float before = e.enemy.hp; tick(e, INPUT_PUNCH_L); tick(e, 0, 20);
+        CHECK(before - e.enemy.hp == 8.0f);
+    }
+    {   // Jack: o soco limpo deixa abelhas no rival
+        GameEngine e = freshMatch(); e.styleTraits = true;
+        tick(e, INPUT_PUNCH_L); tick(e, 0, 20);
+        CHECK(e.enemy.status.infested > 0);
+    }
+    {   // Vivaldi: o soco limpo afasta o rival (10 a mais)
+        GameEngine e = skillMatch(5, SkillLoadout{}); e.styleTraits = true;
+        const float r0 = e.enemy.radius; tick(e, INPUT_PUNCH_L); tick(e, 0, 14);
+        CHECK(e.enemy.radius >= r0 + 9.0f);
+    }
+    {   // o soco dá o passo à frente e alcança um rival que ficou 25 além do alcance
+        GameEngine e = freshMatch();
+        e.enemy.radius = 215.0f - e.player.radius + 25.0f;
+        const float before = e.enemy.hp; tick(e, INPUT_PUNCH_L); tick(e, 0, 20);
+        CHECK(e.enemy.hp < before);
+    }
+}
+
 // Medição (não é teste): korama_tests --ai. O que acontece com cada soco isolado, soco martelado e especial do jogador contra cada rival
 // (fôlego do jogador sempre cheio e vida sempre reposta, para medir só a reação da IA).
 void aiStats() {
@@ -994,10 +1022,37 @@ void aiStats() {
     }
 }
 
+// Medição (não é teste): korama_tests --estilos. Cada lutador na mão do jogador, com o mesmo roteiro (jab e direto alternados a cada 36
+// quadros, sem defender), contra o mesmo rival; e cada lutador como rival do mesmo jogador. Vida reposta a cada quadro, fôlego cheio.
+void styleStats(bool traits) {
+    const char* names[8] = {"Jack", "King Frog", "Joana", "Cremoso", "Valeria", "Vivaldi", "Espinha", "Marcov"};
+    for (int side = 0; side < 2; side++) {
+        std::printf("%s\n", side == 0 ? "== na mao do jogador (rival: Cremoso; o Cremoso enfrenta o Jack)" : "== como rival (jogador: Joana; a Joana enfrenta o Jack)");
+        for (uint32_t c = 0; c < 8; c++) {
+            const uint32_t pc = side == 0 ? c : (c == 2 ? 0u : 2u), ec = side == 0 ? (c == 3 ? 0u : 3u) : c;
+            float dealt = 0.f, taken = 0.f; int landed = 0, thrown = 0, whiff = 0; bool had = false;
+            for (int seed = 0; seed < 3; seed++) { std::srand(31 + seed * 7 + c); GameEngine e; e.startMatch(pc, ec, false, 1); e.slipperyChance = 0.0f; e.styleTraits = traits;
+                for (int t = 0; t < 60 * 60; t++) {
+                    const uint32_t held = t % 36 < 3 ? ((t / 36) % 2 ? INPUT_PUNCH_R : INPUT_PUNCH_L) : 0;
+                    e.player.stamina = e.player.maxStamina; const float eh = e.enemy.hp, ph = e.player.hp;
+                    e.update(held, kDt);
+                    const bool hitNow = isPunchState(e.player.state) && e.player.hasHit;
+                    if (hitNow && !had) { thrown++; if (e.enemy.hp < eh - 0.5f) landed++; else if (e.enemy.state != FIGHTER_BLOCK && e.enemy.state != FIGHTER_DODGE_L && e.enemy.state != FIGHTER_DODGE_R) whiff++; }
+                    had = hitNow; dealt += std::max(0.f, eh - e.enemy.hp); taken += std::max(0.f, ph - e.player.hp);
+                    e.enemy.hp = e.enemy.maxHp; e.player.hp = e.player.maxHp;
+                    if (e.gameState != STATE_FIGHTING) break;
+                } }
+            std::printf("  %-10s causou %4.0f | levou %4.0f | saldo %+5.0f | socos limpos %2d%% | no vazio %2d%%\n", names[c], dealt / 3.f, taken / 3.f, (dealt - taken) / 3.f, thrown ? landed * 100 / thrown : 0, thrown ? whiff * 100 / thrown : 0);
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::string(argv[1]) == "--ai") { aiStats(); return 0; }
+    if (argc > 1 && std::string(argv[1]) == "--estilos") { styleStats(!(argc > 2 && std::string(argv[2]) == "off")); return 0; }   // "off": sem os estilos, para comparar
     const std::vector<std::pair<const char*, std::function<void()>>> tests = {
         {"jab causa 6 e soma combo", testJabDamage},
+        {"estilos: canhão de vidro, enxame, zoneadora e passo à frente", testArchetypes},
         {"soco direito é cross", testCrossIsRightHand},
         {"soco carregado triplica o dano", testChargedPunchTriplesDamage},
         {"carga solta sozinha", testChargeAutoReleases},

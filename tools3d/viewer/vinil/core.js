@@ -79,7 +79,7 @@ export function units(S, FOOT, CX) {
   // mais quadrado). zFn deixa mexer em cada ponto.
   U.loft = (rows, { depth = 0.8, cz = 0, NA = 40, capTop = true, capBot = true, zFn = null, colorFn = null, pw = 2 }) => {
     rows = rows.slice();
-    const sp = v => Math.sign(v) * Math.pow(Math.abs(v), 2 / pw);
+    const sp = (v, p = pw) => Math.sign(v) * Math.pow(Math.abs(v), 2 / p);   // cada linha pode ter o seu pw (row.pw)
     const close = (src, dir) => { const a = (src.r - src.l) / 2, c = (src.l + src.r) / 2, h = Math.min(a * depth, a) * 0.9, out = [];
       for (let k = 1; k <= 5; k++) { const f = Math.cos(k / 5 * Math.PI / 2); out.push({ y: src.y + dir * h * Math.sin(k / 5 * Math.PI / 2), l: c - a * Math.max(f, 0.01), r: c + a * Math.max(f, 0.01) }); } return out; };
     if (capTop) rows = [...close(rows[0], -1).reverse(), ...rows];
@@ -88,8 +88,8 @@ export function units(S, FOOT, CX) {
     for (const row of rows) {
       const a = (row.r - row.l) / 2, c = (row.l + row.r) / 2;
       for (let j = 0; j <= NA; j++) {
-        const th = j / NA * Math.PI * 2, x = c + a * sp(Math.cos(th));
-        let z = cz + a * depth * sp(Math.sin(th));
+        const th = j / NA * Math.PI * 2, x = c + a * sp(Math.cos(th), row.pw);
+        let z = cz + a * depth * sp(Math.sin(th), row.pw);
         if (row.zf) z = row.zf(x, row.y, z, Math.sin(th)); else if (zFn) z = zFn(x, row.y, z, Math.sin(th));
         pos.push(U.X(x), U.Y(row.y), U.D(z));
         if (colorFn) col.push(...colorFn(x, row.y, z, Math.sin(th)));
